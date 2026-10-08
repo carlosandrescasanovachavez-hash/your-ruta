@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#087a4a">
+<title>Your Ruta — GPS + recorrido del día</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f3f7f5;color:#123}
+.app{max-width:760px;margin:auto;padding:20px 14px 28px}header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:14px}
+h1{margin:0;font-size:27px}h2{font-size:15px;margin:18px 0 8px}.sub{color:#68776f;font-size:13px;margin-top:3px}.status{padding:7px 10px;border-radius:999px;background:#e6eee9;font-size:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.card,.mapcard{background:#fff;border:1px solid #dce7e1;border-radius:17px;padding:15px}
+.label{font-size:12px;color:#718078}.value{font-size:22px;font-weight:700;margin-top:4px;word-break:break-word}
+.big{background:#087a4a;border-color:#087a4a;color:#fff}.big .label{color:#cfeee0}
+.mapcard{padding:8px;margin-top:10px}.maptitle{padding:8px 7px;font-weight:650}.map{height:390px;border-radius:13px;overflow:hidden}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}button{border:0;border-radius:12px;padding:12px 15px;font-size:14px;font-weight:650;background:#fff;border:1px solid #d5e1da;color:#173;cursor:pointer}.primary{background:#087a4a;color:#fff;border-color:#087a4a}button:disabled{opacity:.5}
+.msg{font-size:13px;color:#68776f;margin-top:10px;line-height:1.4}
+.hist{background:#fff;border:1px solid #dce7e1;border-radius:17px;padding:4px 15px;font-size:14px}
+.hist div{display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid #edf3ef}.hist div:last-child{border:0}.hist span:first-child{color:#718078}
+@media(max-width:470px){.grid{grid-template-columns:1fr}.map{height:340px}}
+</style>
+</head>
+<body>
+<main class="app">
+<header>
+<div><h1>📍 Your Ruta</h1><div class="sub">GPS + recorrido del día</div></div>
+<div id="status" class="status">Esperando GPS</div>
+</header>
+
+<h2 style="margin-top:0">Resumen de hoy</h2>
+<section class="grid">
+<div class="card big"><div class="label">Distancia recorrida</div><div id="dist" class="value">0.00 km</div></div>
+<div class="card"><div class="label">Tiempo en ruta</div><div id="time" class="value">0 min</div></div>
+<div class="card"><div class="label">Velocidad media</div><div id="avg" class="value">—</div></div>
+<div class="card"><div class="label">Puntos registrados</div><div id="npts" class="value">0</div></div>
+</section>
+
+<section class="mapcard">
+<div class="maptitle">🛰️ Tu recorrido</div>
+<div id="map" class="map"></div>
+</section>
+
+<div class="actions">
+<button id="start" class="primary">▶ Iniciar recorrido</button>
+<button id="stop" disabled>■ Detener</button>
+<button id="locate">📍 Mi posición</button>
+<button id="center">🎯 Centrar</button>
+<button id="sat">🛰️ Satélite</button>
+<button id="road">🗺️ Mapa</button>
+<button id="gpx">⬇ GPX de hoy</button>
+<button id="reset">🗑 Borrar hoy</button>
+</div>
+
+<div id="msg" class="msg">Pulsa «Iniciar recorrido» para registrar tu ruta. Mantén la pantalla encendida: el navegador pausa el GPS cuando se apaga.</div>
+
+<h2>Últimos días</h2>
+<div id="hist" class="hist"></div>
+
+<h2>Posición actual</h2>
+<section class="grid">
+<div class="card"><div class="label">Latitud</div><div id="lat" class="value">—</div></div>
+<div class="card"><div class="label">Longitud</div><div id="lon" class="value">—</div></div>
+<div class="card"><div class="label">Precisión GPS</div><div id="accuracy" class="value">—</div></div>
+<div class="card"><div class="label">Altitud</div><div id="altitude" class="value">—</div></div>
+</section>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const initial=[-41.456410,-72.987802];
+const map=L.map('map').setView(initial,16);
+const satellite=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+const roads=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'});
+satellite.addTo(map);
+const marker=L.marker(initial).addTo(map);
+const circle=L.circle(initial,{radius:5,weight:2,fillOpacity:.12}).addTo(map);
+const line=L.polyline([],{color:'#ff3b30',weight:4}).addTo(map);
+let watchId=null,follow=true,breakNext=false,wake=null;
+map.on('dragstart',()=>{follow=false});
+
+/* ---- almacenamiento local (por día) ---- */
+const KEY='yourruta:v1';
+let store={};
+try{store=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
+function save(){
+ const keys=Object.keys(store).sort();
+ while(keys.length>30)delete store[keys.shift()];
+ try{localStorage.setItem(KEY,JSON.stringify(store))}catch(e){}
+}
+function dayKey(){const x=new Date();return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')}
+function today(){const k=dayKey();return store[k]||(store[k]={dist:0,secs:0,pts:[]})}
+
+/* ---- cálculo ---- */
+function hav(a,b){
+ const R=6371000,r=Math.PI/180,dLa=(b[0]-a[0])*r,dLo=(b[1]-a[1])*r;
+ const h=Math.sin(dLa/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLo/2)**2;
+ return 2*R*Math.asin(Math.sqrt(h));
+}
+function fmt(s){
+ const m=Math.round(s/60);
+ return m<60?m+' min':Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min';
+}
+function segments(){
+ const s=[];
+ today().pts.forEach(p=>{if(p[3]||!s.length)s.push([]);s[s.length-1].push([p[0],p[1]])});
+ return s;
+}
+function addPoint(lat,lon,acc,t){
+ if(Number.isFinite(acc)&&acc>30)return;            // lectura poco fiable
+ const d=today(),last=d.pts[d.pts.length-1];
+ lat=+lat.toFixed(6);lon=+lon.toFixed(6);
+ if(!last||breakNext){d.pts.push([lat,lon,t,1]);breakNext=false}
+ else{
+  const m=hav(last,[lat,lon]),dt=(t-last[2])/1000;
+  if(m<Math.max(8,(acc||0)/2))return;               // ruido GPS estando quieto
+  if(dt>0&&m/dt>55)return;                          // salto imposible (>200 km/h)
+  if(dt>300){d.pts.push([lat,lon,t,1])}             // hueco largo: nuevo tramo sin sumar
+  else{d.dist+=m;d.secs+=dt;d.pts.push([lat,lon,t,0])}
+ }
+ line.setLatLngs(segments());save();render();
+}
+
+/* ---- pantalla ---- */
+function render(){
+ const d=today();
+ $('dist').textContent=(d.dist/1000).toFixed(2)+' km';
+ $('time').textContent=fmt(d.secs);
+ $('avg').textContent=d.secs>60?((d.dist/1000)/(d.secs/3600)).toFixed(1)+' km/h':'—';
+ $('npts').textContent=d.pts.length;
+ const keys=Object.keys(store).sort().reverse().slice(0,7);
+ $('hist').innerHTML=keys.map(k=>{
+  const v=store[k],[y,m,dd]=k.split('-');
+  return '<div><span>'+dd+'/'+m+(k===dayKey()?' (hoy)':'')+'</span><span>'+(v.dist/1000).toFixed(2)+' km · '+fmt(v.secs)+'</span></div>';
+ }).join('')||'<div><span>Sin recorridos todavía</span></div>';
+}
+function setPosition(pos,record){
+ const c=pos.coords,lat=c.latitude,lon=c.longitude,p=[lat,lon];
+ $('lat').textContent=lat.toFixed(6);
+ $('lon').textContent=lon.toFixed(6);
+ $('accuracy').textContent=Number.isFinite(c.accuracy)?Math.round(c.accuracy)+' m':'—';
+ $('altitude').textContent=Number.isFinite(c.altitude)?Math.round(c.altitude)+' m':'No disponible';
+ marker.setLatLng(p);circle.setLatLng(p).setRadius(Number.isFinite(c.accuracy)?c.accuracy:5);
+ if(follow)map.setView(p,Math.max(map.getZoom(),17));
+ if(record){addPoint(lat,lon,c.accuracy,pos.timestamp||Date.now());$('status').textContent='Registrando ruta'}
+ else{$('status').textContent='GPS activo';$('msg').textContent='Posición actualizada: '+new Date().toLocaleString('es-CL')}
+}
+function error(e){
+ const m={1:'Permiso de ubicación denegado. Actívalo en los permisos del navegador.',2:'No se pudo determinar tu ubicación.',3:'El GPS tardó demasiado en responder.'};
+ $('status').textContent='GPS no disponible';
+ $('msg').textContent=m[e.code]||'Error al obtener ubicación.';
+}
+
+/* ---- pantalla encendida durante el recorrido ---- */
+async function keepAwake(){try{if('wakeLock' in navigator)wake=await navigator.wakeLock.request('screen')}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&watchId!==null)keepAwake()});
+
+/* ---- botones ---- */
+$('locate').onclick=()=>{
+ if(!navigator.geolocation){$('msg').textContent='Este navegador no admite GPS.';return}
+ follow=true;$('status').textContent='Buscando GPS…';
+ navigator.geolocation.getCurrentPosition(p=>setPosition(p,false),error,{enableHighAccuracy:true,timeout:20000,maximumAge:0});
+};
+$('center').onclick=()=>{follow=true;map.setView(marker.getLatLng(),18)};
+$('sat').onclick=()=>{if(!map.hasLayer(satellite))map.addLayer(satellite);if(map.hasLayer(roads))map.removeLayer(roads)};
+$('road').onclick=()=>{if(!map.hasLayer(roads))map.addLayer(roads);if(map.hasLayer(satellite))map.removeLayer(satellite)};
+$('start').onclick=()=>{
+ if(!navigator.geolocation){$('msg').textContent='Este navegador no admite GPS.';return}
+ if(watchId!==null)return;
+ follow=true;breakNext=true;
+ watchId=navigator.geolocation.watchPosition(p=>setPosition(p,true),error,{enableHighAccuracy:true,timeout:20000,maximumAge:2000});
+ keepAwake();
+ $('start').disabled=true;$('stop').disabled=false;$('status').textContent='Buscando GPS…';
+ $('msg').textContent='Recorrido en curso. Mantén la pantalla encendida.';
+};
+$('stop').onclick=()=>{
+ if(watchId!==null)navigator.geolocation.clearWatch(watchId);
+ watchId=null;if(wake){wake.release().catch(()=>{});wake=null}
+ $('start').disabled=false;$('stop').disabled=true;$('status').textContent='Recorrido detenido';
+ const d=today();$('msg').textContent='Hoy llevas '+(d.dist/1000).toFixed(2)+' km en '+fmt(d.secs)+'.';
+};
+$('gpx').onclick=()=>{
+ const d=today();
+ if(!d.pts.length){$('msg').textContent='Hoy no hay puntos para exportar.';return}
+ let x='<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Your Ruta" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Your Ruta '+dayKey()+'</name>',open=false;
+ d.pts.forEach(p=>{
+  if(p[3]||!open){if(open)x+='</trkseg>';x+='<trkseg>';open=true}
+  x+='<trkpt lat="'+p[0]+'" lon="'+p[1]+'"><time>'+new Date(p[2]).toISOString()+'</time></trkpt>';
+ });
+ x+='</trkseg></trk></gpx>';
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(new Blob([x],{type:'application/gpx+xml'}));
+ a.download='YourRuta_'+dayKey()+'.gpx';a.click();
+};
+$('reset').onclick=()=>{
+ if(!confirm('¿Borrar el recorrido de hoy?'))return;
+ delete store[dayKey()];save();line.setLatLngs([]);render();
+};
+
+/* ---- inicio ---- */
+line.setLatLngs(segments());
+render();
+const pts=today().pts;
+if(pts.length){const l=pts[pts.length-1];map.setView([l[0],l[1]],16)}
+</script>
+</body>
+</html>
