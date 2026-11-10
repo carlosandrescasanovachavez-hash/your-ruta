@@ -390,67 +390,285 @@ $('sform').onsubmit=async e=>{
 
 /* ---- informe PDF ---- */
 function buildReport(jsPDF,d,store,segs,todayKey,fmt){
- const doc=new jsPDF({unit:'mm',format:'a4'}),M=15,MN={car:'Auto',foot:'A pie',bike:'Bici'};
- let y=36;
- const hm=t=>t?new Date(t).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'}):'-';
+ const doc=new jsPDF({unit:'mm',format:'a4'}),M=15,W=180,PB=280;
+ const MN={car:'Auto',foot:'A pie',bike:'Bici'};
+ const C={navy:[10,42,107],blue:[37,99,235],sky:[14,165,233],red:[239,68,68],green:[22,163,74],amber:[245,158,11],violet:[124,58,237],ink:[15,23,42],mut:[100,116,139],grid:[226,232,240],soft:[239,246,255],tint:[191,219,254],white:[255,255,255],gray:[203,213,225]};
+ const fc=c=>doc.setFillColor(...c),dc=c=>doc.setDrawColor(...c),tc=c=>doc.setTextColor(...c),lw=w=>doc.setLineWidth(w);
+ const font=(s,b)=>{doc.setFont('helvetica',b?'bold':'normal');doc.setFontSize(s)};
+ const dash=on=>doc.setLineDashPattern(on?[1.4,1.2]:[],0);
+ const hav=(a,b)=>{const R=6371000,r=Math.PI/180,dLa=(b[0]-a[0])*r,dLo=(b[1]-a[1])*r,h=Math.sin(dLa/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
+ const hm=t=>t?new Date(t).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',hour12:false}):'-';
  const kmh=(m,s)=>s>30?(m/1000/(s/3600)).toFixed(1)+' km/h':'-';
  const vm=v=>v?v.toFixed(1)+' km/h':'-';
  const km=m=>(m/1000).toFixed(2)+' km';
  const dm=k=>k.split('-').reverse().join('/');
- const chk=n=>{if(y+n>282){doc.addPage();y=18}};
- const head=t=>{chk(16);doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,30,40);doc.text(t,M,y);y+=3;doc.setDrawColor(8,122,74);doc.setLineWidth(.5);doc.line(M,y,195,y);y+=7};
- const row=(c,xs,b)=>{chk(7);doc.setFont('helvetica',b?'bold':'normal');doc.setFontSize(9.5);if(b)doc.setTextColor(90,100,95);else doc.setTextColor(20,30,40);c.forEach((v,i)=>doc.text(String(v),xs[i],y));y+=6};
- const note=t=>{chk(8);doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(90,100,95);doc.text(t,M,y);y+=7};
- const runs=d.runs||[];
+ const num=v=>v===0?'0':v>=100?Math.round(v).toLocaleString('es-CL'):v>=10?v.toFixed(0):v.toFixed(1);
+ const niceMax=v=>{if(!(v>0))return 1;const p=10**Math.floor(Math.log10(v)),n=v/p;return(n<=1?1:n<=2?2:n<=5?5:10)*p};
+ const axMax=v=>{const raw=(v>0?v:1)/4,p=10**Math.floor(Math.log10(raw));for(const m of[1,2,2.5,5,10])if(m*p>=raw)return m*p*4};
+ const runs=d.runs||[],pts=d.pts||[];
+ let y=0,sec=0;
+ const chk=n=>{if(y+n>PB){doc.addPage();y=22}};
 
- doc.setFillColor(8,122,74);doc.rect(0,0,210,26,'F');
- doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(20);doc.text('Your Ruta',M,12);
- doc.setFont('helvetica','normal');doc.setFontSize(11);doc.text('Informe de recorridos - '+dm(todayKey),M,20);
- doc.setFontSize(9);doc.text('Generado: '+new Date().toLocaleString('es-CL'),195,20,{align:'right'});
-
- head('Resumen del dia');
- const S=[M,62,108,152];
- row(['Distancia total',km(d.dist),'Tiempo en ruta',fmt(d.secs)],S);
- row(['Velocidad media',kmh(d.dist,d.secs),'Velocidad maxima',vm(d.vmax)],S);
- row(['Recorridos',runs.length,'Puntos GPS',d.pts.length],S);
- y+=4;
-
- head('Recorridos del dia');
- if(!runs.length)note('Sin recorridos iniciados hoy.');
- else{
-  const X=[M,M+9,M+27,M+45,M+63,M+91,M+119,M+147];
-  row(['#','Modo','Inicio','Fin','Duracion','Distancia','V. media','V. max'],X,true);
-  runs.forEach((r,i)=>row([i+1,MN[r.mode]||'-',hm(r.t0),r.t1?hm(r.t1):'en curso',fmt(r.secs),km(r.dist),kmh(r.dist,r.secs),vm(r.vmax)],X));
+ /* ---- datos derivados ---- */
+ const sp=[],cum=[];let acc=0,gap=true;
+ if(pts.length)cum.push([pts[0][2],0,true]);
+ for(let i=1;i<pts.length;i++){
+  const a=pts[i-1],b=pts[i];
+  if(b[3]){gap=true;cum.push([b[2],acc/1000,false]);continue}
+  const m=hav(a,b),dt=(b[2]-a[2])/1000;if(dt<=0)continue;
+  acc+=m;cum.push([b[2],acc/1000,false]);
+  sp.push({t:b[2],v:Math.min(m/dt*3.6,200),dt,m,gap});gap=false;
  }
- y+=4;
+ sp.forEach((s,i)=>{let n=0,t=0;for(let k=i-2;k<=i+2;k++)if(sp[k]){t+=sp[k].v;n++}s.sv=t/n});
+ const BANDS=[['Detenido o muy lento','menos de 3 km/h',3,C.gray],['Ritmo de caminata','3 a 7 km/h',7,C.green],['Trote o bicicleta','7 a 25 km/h',25,C.sky],['Vehículo en ciudad','25 a 60 km/h',60,C.blue],['Vehículo en carretera','más de 60 km/h',1e9,C.violet]];
+ const band=BANDS.map(()=>0);sp.forEach(s=>{band[BANDS.findIndex(b=>s.v<b[2])]+=s.dt});
+ const bandTot=band.reduce((a,b)=>a+b,0);
+ const hrs=new Array(24).fill(0);sp.forEach(s=>{hrs[new Date(s.t).getHours()]+=s.m/1000});
+ const prevKeys=Object.keys(store).filter(k=>k!==todayKey&&store[k].dist>0).sort().reverse().slice(0,7);
+ const prevAvg=prevKeys.length?prevKeys.reduce((a,k)=>a+store[k].dist,0)/prevKeys.length:0;
+ const byMode={car:0,foot:0,bike:0};runs.forEach(r=>{if(byMode[r.mode]!==undefined)byMode[r.mode]+=r.dist||0});
 
- head('Ruta del dia');
+ /* ---- piezas de diseño ---- */
+ const head=(t,sub,need)=>{
+  y+=4;chk((sub?20:14)+(need||20));sec++;
+  fc(C.blue);doc.circle(M+3.6,y-1.4,3.6,'F');font(9.5,1);tc(C.white);doc.text(String(sec),M+3.6,y-.1,{align:'center'});
+  font(13.5,1);tc(C.ink);doc.text(t,M+10,y);y+=3;
+  dc(C.grid);lw(.4);doc.line(M,y,M+W,y);y+=5;
+  if(sub){font(9);tc(C.mut);const L=doc.splitTextToSize(sub,W);doc.text(L,M,y);y+=L.length*4+2}
+ };
+ const tip=(t,label)=>{
+  font(8.5);const L=doc.splitTextToSize(t,W-16),h=L.length*3.7+9;chk(h+4);
+  fc(C.soft);dc(C.tint);lw(.3);doc.roundedRect(M,y,W,h,2,2,'FD');
+  fc(C.sky);doc.circle(M+6,y+5.2,2.6,'F');font(8,1);tc(C.white);doc.text('i',M+6,y+6.2,{align:'center'});
+  font(8.5,1);tc(C.navy);doc.text(label||'Cómo leerlo',M+11,y+5.8);
+  font(8.5);tc(C.ink);doc.text(L,M+11,y+10);y+=h+6;
+ };
+ const note=t=>{chk(8);font(9.5);tc(C.mut);doc.text(t,M,y);y+=7};
+ const tile=(x,yy,w,h,label,val,hint,col)=>{
+  fc(C.white);dc(C.grid);lw(.3);doc.roundedRect(x,yy,w,h,2.5,2.5,'FD');
+  fc(col);doc.roundedRect(x,yy,1.8,h,.9,.9,'F');
+  font(7.8);tc(C.mut);doc.text(label,x+5,yy+6);
+  font(16,1);tc(C.ink);doc.text(String(val),x+5,yy+14.5);
+  if(hint){font(7);tc(C.mut);doc.text(doc.splitTextToSize(hint,w-8),x+5,yy+20)}
+ };
+ const yAxis=(x,y0,w,h,ymax,unit)=>{
+  font(7);tc(C.mut);dc(C.grid);lw(.2);
+  for(let i=0;i<=4;i++){const yy=y0+h-h*i/4;doc.line(x,yy,x+w,yy);doc.text(num(ymax*i/4),x-2,yy+1,{align:'right'})}
+  if(unit)doc.text(unit,x-2,y0-3);
+ };
+ const label=(t,xr,yy,c)=>{font(7,1);const tw=doc.getTextWidth(t);fc(C.white);doc.rect(xr-tw-1,yy-2.8,tw+2,3.8,'F');tc(c);doc.text(t,xr,yy,{align:'right'})};
+ const lineChart=(x,y0,w,h,data,o)=>{
+  const X=v=>x+w*(v-o.x0)/((o.x1-o.x0)||1),Y=v=>y0+h-h*Math.min(Math.max(v,0),o.ymax)/o.ymax;
+  const groups=[];data.forEach(p=>{if(p[2]||!groups.length)groups.push([]);groups[groups.length-1].push(p)});
+  if(o.fill){fc(o.fill);groups.forEach(g=>{if(g.length<2)return;const P=[[X(g[0][0]),Y(0)],...g.map(p=>[X(p[0]),Y(p[1])]),[X(g[g.length-1][0]),Y(0)]];
+   doc.lines(P.slice(1).map((p,i)=>[p[0]-P[i][0],p[1]-P[i][1]]),P[0][0],P[0][1],[1,1],'F',true)})}
+  yAxis(x,y0,w,h,o.ymax,o.unit);
+  font(7);tc(C.mut);for(let i=0;i<=4;i++){const t=o.x0+(o.x1-o.x0)*i/4;doc.text(hm(t),X(t),y0+h+4,{align:i?i===4?'right':'center':'left'})}
+  dc(o.color);lw(.6);doc.setLineJoin('round');
+  groups.forEach(g=>{for(let i=1;i<g.length;i++)doc.line(X(g[i-1][0]),Y(g[i-1][1]),X(g[i][0]),Y(g[i][1]))});
+  if(o.avg){dc(C.amber);lw(.45);dash(1);doc.line(x,Y(o.avg),x+w,Y(o.avg));dash(0);font(7,1);tc([180,110,0]);label(o.avgLabel,x+w,Y(o.avg)-1.3,[180,110,0])}
+  if(o.peak){const [px,py]=o.peak;fc(C.red);doc.circle(X(px),Y(py),1.1,'F');font(7,1);tc(C.red);const tw=doc.getTextWidth(o.peakLabel);doc.text(o.peakLabel,Math.min(X(px)+2,x+w-tw),Math.max(Y(py)-1.8,y0+2))}
+ };
+ const barChart=(x,y0,w,h,labels,vals,o)=>{
+  const ymax=axMax(Math.max(...vals,o.avg||0,o.min||0)*1.1);
+  yAxis(x,y0,w,h,ymax,o.unit);
+  const n=vals.length,bw=w/n;
+  vals.forEach((v,i)=>{
+   const cx=x+i*bw+bw/2,bh=h*v/ymax;
+   if(bh>.05){fc(i===o.hi?o.hiColor:o.color);doc.rect(cx-bw*.32,y0+h-bh,bw*.64,bh,'F')}
+   if(o.valFmt&&v>0){font(6.5,1);tc(C.ink);doc.text(o.valFmt(v),cx,y0+h-bh-1.2,{align:'center'})}
+   if(!o.every||i%o.every===0){font(7,i===o.hi);tc(i===o.hi?C.ink:C.mut);doc.text(labels[i],cx,y0+h+4,{align:'center'})}
+  });
+  if(o.avg){const yy=y0+h-h*o.avg/ymax;dc(C.amber);lw(.45);dash(1);doc.line(x,yy,x+w,yy);dash(0);font(7,1);tc([180,110,0]);label(o.avgLabel,x+w,yy-1.3,[180,110,0])}
+ };
+
+ /* ---- portada ---- */
+ fc(C.navy);doc.rect(0,0,210,36,'F');fc(C.blue);doc.rect(0,36,210,1.6,'F');fc(C.sky);doc.rect(0,37.6,210,.8,'F');
+ fc(C.sky);doc.circle(M+5,15,5,'F');fc(C.white);doc.circle(M+5,15,2,'F');
+ tc(C.white);font(22,1);doc.text('Your Ruta',M+14,16.5);
+ font(11.5);doc.text('Informe de recorridos del día',M+14,24);
+ const [ky,km_,kd]=todayKey.split('-').map(Number);
+ const longDate=new Date(ky,km_-1,kd).toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+ font(9);tc([191,219,254]);doc.text(longDate.charAt(0).toUpperCase()+longDate.slice(1),M+14,30.5);
+ font(8);doc.text('Generado: '+new Date().toLocaleString('es-CL'),195,30.5,{align:'right'});
+ y=48;
+ font(9.5);tc(C.mut);
+ const intro=doc.splitTextToSize('Este informe resume lo que registró el GPS de tu teléfono durante el día. Cada sección trae una nota «Cómo leerlo» para que puedas interpretar los números y gráficos sin ser experto.',W);
+ doc.text(intro,M,y);y+=intro.length*4.2+6;
+
+ /* 1. Resumen */
+ head('Resumen del día','Los indicadores principales de tu jornada.');
+ const tw=(W-8)/3,th=27;
+ [['Distancia total',km(d.dist),'Todo lo que recorriste hoy',C.blue],
+  ['Tiempo en movimiento',fmt(d.secs),'Solo cuenta mientras te mueves',C.sky],
+  ['Velocidad media',kmh(d.dist,d.secs),'Distancia ÷ tiempo en movimiento',C.green],
+  ['Velocidad máxima',vm(d.vmax),'La más alta medida con buena señal',C.red],
+  ['Recorridos',runs.length,'Veces que pulsaste «Iniciar»',C.amber],
+  ['Puntos GPS',pts.length.toLocaleString('es-CL'),'Posiciones guardadas por el teléfono',C.violet]
+ ].forEach((t,i)=>tile(M+(i%3)*(tw+4),y+Math.floor(i/3)*(th+4),tw,th,...t));
+ y+=2*th+4+8;
+
+ if(prevAvg>0){
+  chk(30);const diff=(d.dist-prevAvg)/prevAvg*100,more=diff>=0;
+  font(10,1);tc(C.ink);doc.text('Hoy comparado con tus días anteriores',M,y);y+=6;
+  const mx=Math.max(d.dist,prevAvg)||1,bx=M+38,bwid=W-38-30;
+  [['Hoy',d.dist,C.blue],['Promedio ('+prevKeys.length+' días)',prevAvg,C.gray]].forEach(([l,v,c])=>{
+   font(8.5);tc(C.mut);doc.text(l,M,y+3.6);fc(C.grid);doc.roundedRect(bx,y,bwid,5,1.5,1.5,'F');
+   if(v>0){fc(c);doc.roundedRect(bx,y,Math.max(bwid*v/mx,3),5,1.5,1.5,'F')}
+   font(8.5,1);tc(C.ink);doc.text(km(v),bx+bwid+3,y+3.8);y+=8;
+  });
+  y+=1;font(9);tc(more?C.green:C.red);
+  doc.text(Math.abs(diff)<1?'Recorriste prácticamente lo mismo que en un día normal.':'Recorriste un '+Math.abs(diff).toFixed(0)+'% '+(more?'más':'menos')+' que tu promedio.',M,y+1);y+=9;
+ }
+
+ /* 2. Equivalencias */
+ if(d.dist>0){
+  head('¿A qué equivale tu distancia?','Comparaciones con cosas cotidianas para dimensionar lo recorrido.');
+  const eq=[[num(d.dist/400),'vueltas a una pista de atletismo (400 m)',C.blue],[num(d.dist/105),'canchas de fútbol puestas en fila (105 m cada una)',C.green]];
+  if(byMode.foot>0)eq.push([num(byMode.foot/0.75),'pasos aproximados caminando',C.amber]);
+  if(byMode.foot+byMode.bike>0)eq.push([num(byMode.foot/1000*55+byMode.bike/1000*30),'kcal estimadas a pie o en bici',C.red]);
+  if(byMode.car>0)eq.push([num(byMode.car/1000*0.17),'kg de CO2 estimados en auto',C.violet]);
+  const ew=(W-4*(eq.length-1))/eq.length,eh=24;chk(eh+4);
+  eq.slice(0,5).forEach(([v,l,c],i)=>{const x=M+i*(ew+4);fc(C.white);dc(C.grid);lw(.3);doc.roundedRect(x,y,ew,eh,2.5,2.5,'FD');
+   font(15,1);tc(c);doc.text(v,x+ew/2,y+9,{align:'center'});font(7.3);tc(C.mut);doc.text(doc.splitTextToSize(l,ew-6),x+ew/2,y+14,{align:'center'})});
+  y+=eh+4;font(7.5);tc(C.mut);doc.text('Valores aproximados, solo como referencia. Pasos: 0,75 m por paso. Calorías: 55 kcal/km a pie y 30 kcal/km en bici. CO2: 0,17 kg/km en auto.',M,y);y+=8;
+ }
+
+ /* 3. Mapa */
+ head('Mapa de tu ruta','Tu trayecto dibujado visto desde arriba, con el norte hacia arriba.',segs.flat().length<2?8:105);
  const all=segs.flat();
- if(all.length<2)note('Sin puntos registrados.');
+ if(all.length<2)note('Sin puntos registrados hoy.');
  else{
-  chk(96);
+  const BW=W,BH=100;chk(BH+16);
   const la=all.map(p=>p[0]),lo=all.map(p=>p[1]);
   const a0=Math.min(...la),a1=Math.max(...la),o0=Math.min(...lo),o1=Math.max(...lo);
-  const kx=Math.cos((a0+a1)/2*Math.PI/180),w=Math.max((o1-o0)*kx,1e-6),h=Math.max(a1-a0,1e-6),BW=180,BH=90,sc=Math.min((BW-10)/w,(BH-10)/h);
+  const kx=Math.cos((a0+a1)/2*Math.PI/180),w=Math.max((o1-o0)*kx,1e-6),h=Math.max(a1-a0,1e-6),sc=Math.min((BW-20)/w,(BH-20)/h);
   const ox=M+(BW-w*sc)/2,oy=y+(BH-h*sc)/2,PX=p=>ox+(p[1]-o0)*kx*sc,PY=p=>oy+(a1-p[0])*sc;
-  doc.setDrawColor(200,210,205);doc.setLineWidth(.3);doc.rect(M,y,BW,BH);
-  doc.setDrawColor(255,59,48);doc.setLineWidth(.7);
+  fc([248,250,252]);dc(C.grid);lw(.3);doc.roundedRect(M,y,BW,BH,3,3,'FD');
+  dc([237,242,247]);lw(.2);for(let gx=M+10;gx<M+BW;gx+=10)doc.line(gx,y+1,gx,y+BH-1);for(let gy=y+10;gy<y+BH;gy+=10)doc.line(M+1,gy,M+BW-1,gy);
+  dc([254,202,202]);lw(2.2);doc.setLineCap('round');doc.setLineJoin('round');
   segs.forEach(s=>{for(let i=1;i<s.length;i++)doc.line(PX(s[i-1]),PY(s[i-1]),PX(s[i]),PY(s[i]))});
-  doc.setFillColor(8,122,74);doc.circle(PX(all[0]),PY(all[0]),1.3,'F');
-  doc.setFillColor(255,59,48);doc.circle(PX(all[all.length-1]),PY(all[all.length-1]),1.3,'F');
-  y+=BH+3;
-  doc.setFontSize(8);doc.setTextColor(120,130,125);doc.text('Verde: inicio. Rojo: ultimo punto. Norte hacia arriba.',M,y);y+=8;
+  dc(C.red);lw(.8);segs.forEach(s=>{for(let i=1;i<s.length;i++)doc.line(PX(s[i-1]),PY(s[i-1]),PX(s[i]),PY(s[i]))});
+  doc.setLineCap('butt');
+  // marcas de kilómetros
+  const totKm=acc/1000,step=totKm<=10?1:totKm<=25?2:totKm<=60?5:totKm<=150?10:25;let nextK=step,run=0;
+  segs.forEach(s=>{for(let i=1;i<s.length;i++){const m=hav(s[i-1],s[i]);run+=m;while(run/1000>=nextK){const f=1-(run-nextK*1000)/m,p=[s[i-1][0]+(s[i][0]-s[i-1][0])*f,s[i-1][1]+(s[i][1]-s[i-1][1])*f];
+   fc(C.white);dc(C.navy);lw(.35);doc.circle(PX(p),PY(p),2.4,'FD');font(6,1);tc(C.navy);doc.text(String(nextK),PX(p),PY(p)+.8,{align:'center'});nextK+=step}}});
+  const pin=(p,c,l)=>{fc(c);doc.circle(PX(p),PY(p),2.2,'F');fc(C.white);doc.circle(PX(p),PY(p),.8,'F');font(7.5,1);const tw=doc.getTextWidth(l),r=PX(p)+3.5+tw>M+BW-3;label(l,r?PX(p)-3.5:PX(p)+3.5+tw,PY(p)-2.5,c)};
+  pin(all[0],C.green,'Inicio '+hm(pts[0]&&pts[0][2]));pin(all[all.length-1],C.red,'Fin '+hm(pts.length&&pts[pts.length-1][2]));
+  // norte
+  const nx=M+8,ny=y+8;fc(C.navy);doc.triangle(nx,ny-4,nx-2.5,ny+2,nx+2.5,ny+2,'F');font(7,1);tc(C.navy);doc.text('N',nx,ny+6,{align:'center'});
+  // escala
+  const mPerMm=111320/sc,target=mPerMm*35,nice=[50,100,200,500,1000,2000,5000,10000,20000,50000,100000].reduce((a,b)=>Math.abs(b-target)<Math.abs(a-target)?b:a),sl=nice/mPerMm;
+  const sx=M+BW-6-sl,sy=y+BH-6;fc(C.ink);doc.rect(sx,sy,sl/2,1.4,'F');fc(C.white);dc(C.ink);lw(.25);doc.rect(sx+sl/2,sy,sl/2,1.4,'FD');
+  font(6.5);tc(C.ink);doc.text('0',sx,sy-1.2,{align:'center'});doc.text(nice>=1000?nice/1000+' km':nice+' m',sx+sl,sy-1.2,{align:'center'});
+  y+=BH+5;
+  font(7.5);[[C.green,'Inicio del día'],[C.red,'Último punto'],[C.navy,'Kilómetro recorrido (cada '+step+' km)']].reduce((x,[c,l])=>{fc(c);doc.circle(x+1.5,y-1,1.5,'F');tc(C.mut);doc.text(l,x+4.5,y);return x+doc.getTextWidth(l)+12},M);
+  y+=6;
+  tip('La línea roja es el camino que seguiste. Los círculos numerados marcan '+(step===1?'cada kilómetro':'cada '+step+' km')+', así puedes ver dónde ibas al completar '+(step===1?'1, 2, 3…':step+', '+2*step+', '+3*step+'…')+' km. La barra de escala abajo a la derecha indica cuánto mide en la realidad esa distancia en el dibujo.');
  }
 
- head('Ultimos dias');
- const H=[M,M+30,M+62,M+94,M+126,M+156];
- row(['Fecha','Distancia','Tiempo','V. media','V. max','Recorridos'],H,true);
- Object.keys(store).sort().reverse().slice(0,7).forEach(k=>{const v=store[k];row([dm(k),km(v.dist),fmt(v.secs),kmh(v.dist,v.secs),vm(v.vmax),(v.runs||[]).length],H)});
+ /* 4. Velocidad */
+ head('Tu velocidad durante el día','Qué tan rápido te movías en cada momento del día.',sp.length<3?8:92);
+ if(sp.length<3)note('No hay suficientes datos para graficar la velocidad.');
+ else{
+  const ch=55;chk(ch+16);
+  const data=sp.map(s=>[s.t,s.sv,s.gap]),pk=sp.reduce((a,b)=>b.sv>a.sv?b:a),avgV=d.secs>30?d.dist/1000/(d.secs/3600):0;
+  lineChart(M+10,y+4,W-10,ch,data,{x0:sp[0].t,x1:sp[sp.length-1].t,ymax:axMax(pk.sv*1.05),color:C.blue,fill:C.tint,unit:'km/h',avg:avgV,avgLabel:'media '+avgV.toFixed(1)+' km/h',peak:[pk.t,pk.sv],peakLabel:'máx. '+pk.sv.toFixed(0)+' km/h · '+hm(pk.t)});
+  y+=ch+15;
+  tip('El eje horizontal es la hora y el vertical la velocidad. Los picos son momentos en que ibas más rápido y los tramos cerca de cero son detenciones (semáforos, paradas, descansos). La línea punteada naranja es tu velocidad media: si la curva pasa mucho tiempo por encima, tuviste un día ágil.');
+ }
 
+ /* 5. Distancia acumulada */
+ head('Distancia acumulada','Cómo fue sumando kilómetros a lo largo del día.',cum.length<3?8:85);
+ if(cum.length<3)note('No hay suficientes datos para este gráfico.');
+ else{
+  const ch=50;chk(ch+14);
+  lineChart(M+10,y+4,W-10,ch,cum.map(p=>[p[0],p[1],false]),{x0:cum[0][0],x1:cum[cum.length-1][0],ymax:axMax(acc/1000*1.03),color:C.green,fill:[220,252,231],unit:'km'});
+  y+=ch+15;
+  tip('La curva siempre sube o se mantiene. Mientras más empinada, más rápido avanzabas; los tramos planos son momentos detenido o sin registro. El punto final de la curva es tu distancia total del día.');
+ }
+
+ /* 6. Ritmo */
+ head('¿A qué ritmo te moviste?','Porcentaje del tiempo en movimiento que pasaste en cada rango de velocidad.',bandTot?75:8);
+ if(!bandTot)note('Sin datos de velocidad.');
+ else{
+  chk(BANDS.length*9+4);
+  BANDS.forEach((b,i)=>{
+   const p=band[i]/bandTot,bx=M+52,bwid=W-52-34;
+   font(8.5,1);tc(C.ink);doc.text(b[0],M,y+3);font(7);tc(C.mut);doc.text(b[1],M,y+6.6);
+   fc(C.grid);doc.roundedRect(bx,y,bwid,5.5,1.5,1.5,'F');if(p>0){fc(b[3]);doc.roundedRect(bx,y,Math.max(bwid*p,2.5),5.5,1.5,1.5,'F')}
+   font(8.5,1);tc(C.ink);doc.text(Math.round(p*100)+'%',bx+bwid+3,y+4);font(7.5);tc(C.mut);doc.text(fmt(band[i]),bx+bwid+13,y+4);
+   y+=9.5;
+  });
+  y+=2;
+  const top=band.indexOf(Math.max(...band));
+  tip('Cada barra muestra qué parte de tu tiempo en movimiento estuviste en ese rango. Hoy pasaste la mayor parte del tiempo en «'+BANDS[top][0].toLowerCase()+'» ('+Math.round(band[top]/bandTot*100)+'%). Un porcentaje alto en «detenido o muy lento» suele indicar mucho tráfico o paradas frecuentes.');
+ }
+
+ /* 7. Por hora */
+ head('Distancia por hora del día','En qué horas te desplazaste más.',hrs.some(v=>v>0)?80:8);
+ if(!hrs.some(v=>v>0))note('Sin datos.');
+ else{
+  const ch=45;chk(ch+14);
+  barChart(M+10,y+4,W-10,ch,hrs.map((_,i)=>String(i)),hrs,{color:C.sky,unit:'km',every:2,hi:hrs.indexOf(Math.max(...hrs)),hiColor:C.blue,valFmt:v=>v>=.05?v.toFixed(1):''});
+  y+=ch+15;
+  const hi=hrs.indexOf(Math.max(...hrs));
+  tip('Cada barra es una hora del día (0 = medianoche, 12 = mediodía) y su altura los kilómetros recorridos en esa hora. Tu hora más activa fue entre las '+hi+':00 y las '+(hi+1)+':00, con '+hrs[hi].toFixed(1)+' km (barra azul oscuro).');
+ }
+
+ /* 8. Recorridos */
+ head('Recorridos del día','Cada recorrido va desde que pulsaste «Iniciar» hasta «Detener».');
+ if(!runs.length)note('Sin recorridos iniciados hoy.');
+ else{
+  const X=[M+2,M+11,M+29,M+47,M+65,M+93,M+121,M+149];
+  chk(14);fc(C.soft);doc.rect(M,y-4.5,W,7,'F');font(8.5,1);tc(C.navy);
+  ['#','Modo','Inicio','Fin','Duración','Distancia','V. media','V. máx.'].forEach((v,i)=>doc.text(v,X[i],y));y+=7;
+  runs.forEach((r,i)=>{chk(7);if(i%2){fc([248,250,252]);doc.rect(M,y-4.5,W,7,'F')}font(9);tc(C.ink);
+   [i+1,MN[r.mode]||'-',hm(r.t0),r.t1?hm(r.t1):'en curso',fmt(r.secs),km(r.dist),kmh(r.dist,r.secs),vm(r.vmax)].forEach((v,k)=>doc.text(String(v),X[k],y));y+=7});
+  y+=3;
+  if(runs.length>1){
+   const ch=38;chk(ch+12);
+   barChart(M+10,y+4,W-10,ch,runs.map((r,i)=>'#'+(i+1)+' '+(MN[r.mode]||'')),runs.map(r=>(r.dist||0)/1000),{color:C.blue,unit:'km',valFmt:v=>v.toFixed(2)});
+   y+=ch+15;
+  }
+ }
+
+ /* 9. Últimos días */
+ head('Tus últimos 7 días','Tu actividad reciente para ver tendencias.',56);
+ const keys=Object.keys(store).sort().slice(-7);
+ if(keys.length){
+  const ch=45;
+  const vals=keys.map(k=>store[k].dist/1000),avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+  if(avg>0){chk(ch+14);barChart(M+10,y+4,W-10,ch,keys.map(k=>k===todayKey?'Hoy':dm(k).slice(0,5)),vals,{color:C.tint,hi:keys.indexOf(todayKey),hiColor:C.blue,unit:'km',valFmt:v=>v.toFixed(1),avg,avgLabel:'promedio '+avg.toFixed(1)+' km'});
+  y+=ch+15;}
+  const H=[M+2,M+32,M+64,M+96,M+128,M+158];
+  chk(14);fc(C.soft);doc.rect(M,y-4.5,W,7,'F');font(8.5,1);tc(C.navy);
+  ['Fecha','Distancia','Tiempo','V. media','V. máx.','Recorridos'].forEach((v,i)=>doc.text(v,H[i],y));y+=7;
+  keys.slice().reverse().forEach((k,i)=>{chk(7);const v=store[k];if(i%2){fc([248,250,252]);doc.rect(M,y-4.5,W,7,'F')}font(9,k===todayKey);tc(C.ink);
+   [k===todayKey?dm(k)+' (hoy)':dm(k),km(v.dist),fmt(v.secs),kmh(v.dist,v.secs),vm(v.vmax),(v.runs||[]).length].forEach((x,j)=>doc.text(String(x),H[j],y));y+=7});
+  y+=3;
+  tip('La barra azul es hoy y las celestes son los días anteriores. La línea punteada es el promedio de estos días: las barras que la superan son días con más actividad de lo habitual.');
+ }
+
+ /* 10. Glosario */
+ head('Glosario','Qué significa cada término del informe.');
+ [['Distancia recorrida','Suma de los tramos en línea recta entre puntos GPS válidos consecutivos.'],
+  ['Tiempo en movimiento','Tiempo entre puntos en que realmente avanzaste. No cuenta pausas largas (más de 5 min sin señal).'],
+  ['Velocidad media','Distancia total dividida por el tiempo en movimiento.'],
+  ['Velocidad máxima','La velocidad más alta registrada con buena precisión, suavizada para evitar errores.'],
+  ['Punto GPS','Una posición (latitud y longitud) que el teléfono guardó en un momento dado.'],
+  ['Precisión GPS','Margen de error de cada posición. Se descartan las lecturas con más de 30 m de error.'],
+  ['Recorrido','Periodo entre que pulsas «Iniciar recorrido» y «Detener».']
+ ].forEach(([t,dsc])=>{font(8.5);const L=doc.splitTextToSize(dsc,W-48);chk(L.length*3.8+3);font(8.5,1);tc(C.navy);doc.text(t,M,y);font(8.5);tc(C.ink);doc.text(L,M+48,y);y+=L.length*3.8+3});
+
+ /* encabezado y pie */
  const n=doc.getNumberOfPages();
- for(let i=1;i<=n;i++){doc.setPage(i);doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(140,150,145);
-  doc.text('Your Ruta - distancias y velocidades estimadas con el GPS del telefono; pueden variar.',M,290);
-  doc.text('Pagina '+i+' de '+n,195,290,{align:'right'})}
+ for(let i=1;i<=n;i++){doc.setPage(i);
+  if(i>1){fc(C.navy);doc.rect(0,0,210,11,'F');font(8.5,1);tc(C.white);doc.text('Your Ruta',M,7);font(8);tc([191,219,254]);doc.text('Informe del '+dm(todayKey),195,7,{align:'right'})}
+  dc(C.grid);lw(.3);doc.line(M,286,195,286);font(7.5);tc([148,163,184]);
+  doc.text('Your Ruta · Distancias y velocidades estimadas con el GPS del teléfono; pueden variar.',M,290);
+  doc.text('Página '+i+' de '+n,195,290,{align:'right'})}
  return doc;
 }
 /* ---- fin informe ---- */
