@@ -3,38 +3,99 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#087a4a">
+<meta name="theme-color" content="#0a2a6b">
 <title>Your Ruta — GPS + recorrido del día</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f3f7f5;color:#123}
-.app{max-width:760px;margin:auto;padding:20px 14px 28px}header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:14px}
-h1{margin:0;font-size:27px}h2{font-size:15px;margin:18px 0 8px}.sub{color:#68776f;font-size:13px;margin-top:3px}.status{padding:7px 10px;border-radius:999px;background:#e6eee9;font-size:12px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.card,.mapcard{background:#fff;border:1px solid #dce7e1;border-radius:17px;padding:15px}
-.label{font-size:12px;color:#718078}.value{font-size:22px;font-weight:700;margin-top:4px;word-break:break-word}
-.big{background:#087a4a;border-color:#087a4a;color:#fff}.big .label{color:#cfeee0}
-.mapcard{padding:8px;margin-top:10px}.maptitle{padding:8px 7px;font-weight:650}.map{height:390px;border-radius:13px;overflow:hidden}
-.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}button{border:0;border-radius:12px;padding:12px 15px;font-size:14px;font-weight:650;background:#fff;border:1px solid #d5e1da;color:#173;cursor:pointer}.primary{background:#087a4a;color:#fff;border-color:#087a4a}button:disabled{opacity:.5}
-.msg{font-size:13px;color:#68776f;margin-top:10px;line-height:1.4}
-.hist{background:#fff;border:1px solid #dce7e1;border-radius:17px;padding:4px 15px;font-size:14px}
-.hist div{display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid #edf3ef}.hist div:last-child{border:0}.hist span:first-child{color:#718078}
+:root{--bg1:#04122e;--bg2:#0a2a6b;--bg3:#1456c4;--card:rgba(255,255,255,.08);--card-b:rgba(255,255,255,.16);--txt:#eaf2ff;--mut:#9fb6dc;--acc:#38bdf8;--acc2:#60a5fa;--hot:#22d3ee}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:var(--txt);min-height:100vh;
+ background:radial-gradient(1200px 600px at 10% -10%,#1d6fe0 0,transparent 60%),radial-gradient(900px 500px at 110% 20%,#0ea5e9 0,transparent 55%),linear-gradient(160deg,var(--bg1),var(--bg2) 55%,#0b1d4d);background-attachment:fixed}
+.app{max-width:760px;margin:auto;padding:22px 16px 30px}
+header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:16px}
+h1{margin:0;font-size:32px}
+h1{opacity:0;transform:translateY(16px);letter-spacing:6px;transition:opacity .8s ease,transform .8s cubic-bezier(.2,.8,.2,1),letter-spacing 1s ease}h1.in{opacity:1;transform:none;letter-spacing:.5px}
+#intro .name .ch{display:inline-block;opacity:0;transform:translateY(.6em) rotateX(80deg);animation:chIn .6s cubic-bezier(.2,.8,.2,1) forwards}
+h1 .t{background:linear-gradient(90deg,#fff,#7dd3fc,#a5b4fc,#fff);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
+h2{font-size:15px;margin:22px 0 10px;color:#cfe0ff;letter-spacing:.4px;text-transform:uppercase;font-weight:700}
+h2::after{content:"";display:block;height:2px;width:0;margin-top:6px;background:linear-gradient(90deg,var(--acc),transparent);animation:grow 1s .3s ease forwards}
+.sub{color:var(--mut);font-size:13px;margin-top:4px;min-height:1.2em}
+.sub .caret{display:inline-block;width:2px;height:1em;background:var(--acc);margin-left:2px;vertical-align:-2px;animation:blink 1s steps(1) infinite}
+.status{padding:7px 12px;border-radius:999px;background:rgba(56,189,248,.15);border:1px solid rgba(56,189,248,.4);font-size:12px;white-space:nowrap}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card,.mapcard,.hist,.sbox{background:var(--card);border:1px solid var(--card-b);border-radius:18px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.card{padding:15px;transition:transform .2s,border-color .2s}.card:hover{transform:translateY(-2px);border-color:rgba(125,211,252,.5)}
+.label{font-size:12px;color:var(--mut)}.value{font-size:23px;font-weight:750;margin-top:4px;word-break:break-word}
+.big{background:linear-gradient(135deg,#2563eb,#0ea5e9);border-color:transparent}.big .label{color:#dbeafe}
+.mapcard{padding:8px;margin-top:12px}.maptitle{padding:8px 7px;font-weight:650;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.map-wrap{position:relative;border-radius:14px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.map{height:430px}
+.mapfull .mapcard{backdrop-filter:none;-webkit-backdrop-filter:none;transform:none!important;transition:none}
+.map-wrap.full{position:fixed;inset:0;z-index:2000;border-radius:0}.map-wrap.full .map{height:100vh}
+.mctl{position:absolute;z-index:1000;display:flex;flex-direction:column;gap:6px}
+.mctl.tr{top:10px;right:10px}.mctl.bl{bottom:12px;left:10px;flex-direction:row}
+.mctl button{width:42px;height:42px;padding:0;border-radius:12px;font-size:18px;background:rgba(8,20,50,.78);color:#fff;border:1px solid rgba(255,255,255,.2);backdrop-filter:blur(6px);box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.mctl button:hover{background:rgba(37,99,235,.9)}
+.seg{display:flex;background:rgba(8,20,50,.78);border:1px solid rgba(255,255,255,.2);border-radius:12px;overflow:hidden;backdrop-filter:blur(6px)}
+.seg button{width:auto;height:36px;padding:0 12px;font-size:13px;border:0;border-radius:0;background:transparent;box-shadow:none}
+.seg button.on{background:linear-gradient(135deg,#2563eb,#0ea5e9)}
+.legend{position:absolute;z-index:1000;left:10px;top:10px;background:rgba(8,20,50,.78);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:6px 9px;font-size:11px;line-height:1.6;backdrop-filter:blur(6px)}
+.legend i{display:inline-block;width:16px;height:4px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.pickhint{position:absolute;z-index:1000;left:50%;bottom:14px;transform:translateX(-50%);background:#f59e0b;color:#111;font-weight:700;font-size:13px;padding:8px 14px;border-radius:999px;display:none;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.picking .pickhint{display:block}.picking .map{cursor:crosshair}
+.leaflet-bar a{background:rgba(8,20,50,.85)!important;color:#fff!important;border-color:rgba(255,255,255,.15)!important}
+.leaflet-bar{border:1px solid rgba(255,255,255,.2)!important;border-radius:12px!important;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)!important}
+.leaflet-control-scale-line{background:rgba(8,20,50,.7);color:#fff;border-color:#fff}
+.leaflet-control-attribution{background:rgba(8,20,50,.6)!important;color:#cbd5e1!important}.leaflet-control-attribution a{color:#7dd3fc!important}
+.me{position:relative;width:34px;height:34px}.me .e{position:absolute;inset:0;display:grid;place-items:center;font-size:28px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}
+.me::before{content:"";position:absolute;inset:-6px;border-radius:50%;background:rgba(56,189,248,.35);animation:pulse 2s ease-out infinite}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+button{border-radius:12px;padding:12px 15px;font-size:14px;font-weight:650;background:rgba(255,255,255,.08);border:1px solid var(--card-b);color:var(--txt);cursor:pointer;transition:transform .15s,background .2s}
+button:hover{background:rgba(255,255,255,.16)}button:active{transform:scale(.97)}
+.primary{background:linear-gradient(135deg,#2563eb,#0ea5e9);border-color:transparent;color:#fff;box-shadow:0 6px 18px rgba(14,165,233,.35)}
+button:disabled{opacity:.45;cursor:default}
+.msg{font-size:13px;color:var(--mut);margin-top:12px;line-height:1.45}
+.hist{padding:4px 15px;font-size:14px}
+.hist div{display:flex;justify-content:space-between;gap:8px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)}.hist div:last-child{border:0}.hist span:first-child{color:var(--mut)}
 .chart{width:100%;height:170px;display:block}
-select{border-radius:12px;padding:12px 10px;font-size:14px;font-weight:650;background:#fff;border:1px solid #d5e1da;color:#173}
-.sbox{background:#fff;border:1px solid #dce7e1;border-radius:17px;padding:12px;margin-top:10px}
-.sbox form{display:flex;gap:8px}.sbox input{flex:1;min-width:0;border:1px solid #d5e1da;border-radius:12px;padding:12px;font-size:14px}
+select{border-radius:12px;padding:12px 10px;font-size:14px;font-weight:650;background:rgba(255,255,255,.08);border:1px solid var(--card-b);color:var(--txt)}
+select option{color:#0b1d4d}
+.sbox{padding:12px;margin-top:12px}
+.sbox form{display:flex;gap:8px}.sbox input{flex:1;min-width:0;border:1px solid var(--card-b);background:rgba(0,0,0,.2);color:var(--txt);border-radius:12px;padding:12px;font-size:14px}
+.sbox input::placeholder{color:var(--mut)}.sbox input:focus{outline:2px solid var(--acc);border-color:transparent}
 .res button{display:block;width:100%;text-align:left;margin-top:6px;font-weight:500}
-@media(max-width:470px){.grid{grid-template-columns:1fr}.map{height:340px}}
+/* presentación */
+.reveal{opacity:0;transform:translateY(24px) scale(.98);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.8,.2,1)}
+.reveal.in{opacity:1;transform:none}
+#intro{position:fixed;inset:0;z-index:5000;display:grid;place-items:center;text-align:center;background:linear-gradient(160deg,var(--bg1),var(--bg2));transition:opacity .8s ease,visibility .8s}
+#intro.hide{opacity:0;visibility:hidden}
+#intro .logo{font-size:64px;animation:drop .9s cubic-bezier(.2,1.4,.4,1) both}
+#intro .name{font-size:44px;font-weight:800;margin-top:6px;letter-spacing:2px}
+#intro .tag{color:#9fb6dc;margin-top:10px;opacity:0;animation:fade .8s 1.3s forwards}
+#intro .bar{width:160px;height:3px;margin:22px auto 0;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden}
+#intro .bar::after{content:"";display:block;height:100%;width:0;background:linear-gradient(90deg,#38bdf8,#a5b4fc);animation:load 2s .2s ease forwards}
+@keyframes chIn{to{opacity:1;transform:none}}
+@keyframes shine{to{background-position:300% 0}}
+@keyframes grow{to{width:60px}}
+@keyframes blink{50%{opacity:0}}
+@keyframes pulse{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.8);opacity:0}}
+@keyframes drop{from{transform:translateY(-60px) scale(.5);opacity:0}}
+@keyframes fade{to{opacity:1}}
+@keyframes load{to{width:100%}}
+@media(max-width:470px){.grid{grid-template-columns:1fr}.map{height:380px}h1{font-size:28px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition:none!important}.reveal,h1{opacity:1;transform:none}}
 </style>
 </head>
 <body>
+<div id="intro" aria-hidden="true"><div><div class="logo">📍</div><div class="name" id="introName">Your Ruta</div><div class="tag">GPS + recorrido del día</div><div class="bar"></div></div></div>
 <main class="app">
 <header>
-<div><h1>📍 Your Ruta</h1><div class="sub">GPS + recorrido del día</div></div>
+<div><h1>📍 <span class="t" id="title">Your Ruta</span></h1><div class="sub" id="subt" data-text="GPS + recorrido del día"></div></div>
 <div id="status" class="status">Esperando GPS</div>
 </header>
 
-<h2 style="margin-top:0">Resumen de hoy</h2>
-<section class="grid">
+<h2 class="reveal" style="margin-top:0">Resumen de hoy</h2>
+<section class="grid reveal">
 <div class="card big"><div class="label">Distancia recorrida</div><div id="dist" class="value">0.00 km</div></div>
 <div class="card"><div class="label">Tiempo en ruta</div><div id="time" class="value">0 min</div></div>
 <div class="card"><div class="label">Velocidad media</div><div id="avg" class="value">—</div></div>
@@ -42,7 +103,7 @@ select{border-radius:12px;padding:12px 10px;font-size:14px;font-weight:650;backg
 <div class="card"><div class="label">Puntos registrados</div><div id="npts" class="value">0</div></div>
 </section>
 
-<section class="sbox">
+<section class="sbox reveal">
 <form id="sform"><input id="q" type="search" placeholder="Buscar dirección o lugar de destino" autocomplete="off"><button class="primary" type="submit">Buscar</button></form>
 <div id="results" class="res"></div>
 </section>
@@ -53,24 +114,30 @@ select{border-radius:12px;padding:12px 10px;font-size:14px;font-weight:650;backg
 <div class="card" style="grid-column:1/-1"><div class="label">Hora de llegada</div><div id="reta" class="value">—</div></div>
 </section>
 
-<section class="mapcard">
-<div class="maptitle">🛰️ Tu recorrido</div>
+<section class="mapcard reveal">
+<div class="maptitle"><span>🛰️ Tu recorrido</span><span class="seg"><button id="sat" class="on">🛰️ Satélite</button><button id="road">🗺️ Mapa</button></span></div>
+<div class="map-wrap" id="mapwrap">
 <div id="map" class="map"></div>
+<div class="legend"><div><i style="background:#ff3b30"></i>Recorrido</div><div><i style="background:#38bdf8"></i>Ruta al destino</div></div>
+<div class="mctl tr">
+<button id="locate" title="Mi posición">📍</button>
+<button id="center" title="Centrar">🎯</button>
+<button id="pick" title="Elegir destino">🏁</button>
+<button id="fit" title="Ver todo el recorrido">🔭</button>
+<button id="full" title="Pantalla completa">⛶</button>
+</div>
+<div class="pickhint">Toca el mapa para marcar el destino</div>
+</div>
 </section>
 
-<section class="mapcard">
+<section class="mapcard reveal">
 <div class="maptitle" style="display:flex;justify-content:space-between"><span>⚡ Velocidad en vivo</span><span id="vnow">—</span></div>
 <canvas id="chart" class="chart"></canvas>
 </section>
 
-<div class="actions">
+<div class="actions reveal">
 <button id="start" class="primary">▶ Iniciar recorrido</button>
 <button id="stop" disabled>■ Detener</button>
-<button id="locate">📍 Mi posición</button>
-<button id="center">🎯 Centrar</button>
-<button id="sat">🛰️ Satélite</button>
-<button id="road">🗺️ Mapa</button>
-<button id="pick">🏁 Elegir destino</button>
 <select id="mode"><option value="car">🚗 Auto</option><option value="foot">🚶 A pie</option><option value="bike">🚲 Bici</option></select>
 <button id="clear">✖ Quitar destino</button>
 <button id="gpx">⬇ GPX de hoy</button>
@@ -80,11 +147,11 @@ select{border-radius:12px;padding:12px 10px;font-size:14px;font-weight:650;backg
 
 <div id="msg" class="msg">Pulsa «Iniciar recorrido» para registrar tu ruta. Mantén la pantalla encendida: el navegador pausa el GPS cuando se apaga.</div>
 
-<h2>Últimos días</h2>
-<div id="hist" class="hist"></div>
+<h2 class="reveal">Últimos días</h2>
+<div id="hist" class="hist reveal"></div>
 
-<h2>Posición actual</h2>
-<section class="grid">
+<h2 class="reveal">Posición actual</h2>
+<section class="grid reveal">
 <div class="card"><div class="label">Latitud</div><div id="lat" class="value">—</div></div>
 <div class="card"><div class="label">Longitud</div><div id="lon" class="value">—</div></div>
 <div class="card"><div class="label">Precisión GPS</div><div id="accuracy" class="value">—</div></div>
@@ -92,20 +159,41 @@ select{border-radius:12px;padding:12px 10px;font-size:14px;font-weight:650;backg
 </section>
 </main>
 
+<script>
+/* ---- presentación ---- */
+(function(){
+ const split=(el,base,step)=>{const t=el.textContent;el.textContent='';[...t].forEach((c,i)=>{const s=document.createElement('span');s.className='ch';s.textContent=c===' '?'\u00a0':c;s.style.animationDelay=(base+i*step)+'s';el.appendChild(s)})};
+ split(document.getElementById('introName'),.4,.07);
+ const intro=document.getElementById('intro');let done=false;
+ const go=()=>{if(done)return;done=true;intro.classList.add('hide');
+  document.querySelector('h1').classList.add('in');
+  const sb=document.getElementById('subt'),txt=sb.dataset.text;let i=0;sb.innerHTML='<span></span><span class="caret"></span>';
+  const tick=()=>{sb.firstChild.textContent=txt.slice(0,++i);if(i<txt.length)setTimeout(tick,45);else setTimeout(()=>sb.lastChild.remove(),1500)};setTimeout(tick,600);
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.08});
+  document.querySelectorAll('.reveal').forEach((el,k)=>{el.style.transitionDelay=Math.min(k*0.08,.6)+'s';io.observe(el)});
+  setTimeout(()=>{try{map.invalidateSize();drawChart()}catch(e){}},900);
+ };
+ intro.onclick=go;setTimeout(go,2400);
+})();
+
+</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const initial=[-41.456410,-72.987802];
-const map=L.map('map').setView(initial,16);
+const map=L.map('map',{zoomControl:false}).setView(initial,16);
+L.control.zoom({position:'bottomright'}).addTo(map);
+L.control.scale({imperial:false,position:'bottomleft'}).addTo(map);
 const satellite=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
 const roads=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'});
 satellite.addTo(map);
 const ICONS={car:'🚗',foot:'🚶',bike:'🚲'};
-function iconFor(m){return L.divIcon({className:'',html:'<div style="font-size:30px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))">'+(ICONS[m]||'🚗')+'</div>',iconSize:[32,32],iconAnchor:[16,16]})}
+function iconFor(m){return L.divIcon({className:'',html:'<div class="me"><div class="e">'+(ICONS[m]||'🚗')+'</div></div>',iconSize:[34,34],iconAnchor:[17,17]})}
 const marker=L.marker(initial,{icon:iconFor('car'),zIndexOffset:1000}).addTo(map);
-const circle=L.circle(initial,{radius:5,weight:2,fillOpacity:.12}).addTo(map);
-const line=L.polyline([],{color:'#ff3b30',weight:4}).addTo(map);
+const circle=L.circle(initial,{radius:5,weight:1.5,color:'#38bdf8',fillColor:'#38bdf8',fillOpacity:.12}).addTo(map);
+const lineCase=L.polyline([],{color:'#3b0a07',weight:8,opacity:.55}).addTo(map);
+const line=L.polyline([],{color:'#ff3b30',weight:4.5,lineJoin:'round'}).addTo(map);
 let watchId=null,follow=true,breakNext=false,wake=null,curRun=null;
 map.on('dragstart',()=>{follow=false});
 
@@ -148,7 +236,7 @@ function addPoint(lat,lon,acc,t){
   if(dt>300){d.pts.push([lat,lon,t,1])}             // hueco largo: nuevo tramo sin sumar
   else{d.dist+=m;d.secs+=dt;if(curRun){curRun.dist+=m;curRun.secs+=dt}d.pts.push([lat,lon,t,0])}
  }
- line.setLatLngs(segments());save();render();
+ {const sg=segments();line.setLatLngs(sg);lineCase.setLatLngs(sg)}save();render();
 }
 
 /* ---- pantalla ---- */
@@ -189,11 +277,11 @@ function drawChart(){
  const pl=34,pb=18,pt=8,pr=8,W=w-pl-pr,H=h-pt-pb;
  const now=spd.length?spd[spd.length-1].t:0;
  const max=Math.max(10,Math.ceil(Math.max(0,...spd.map(s=>s.v))/5)*5);
- g.font='11px system-ui';g.fillStyle='#718078';g.strokeStyle='#e3ece7';g.lineWidth=1;
+ g.font='11px system-ui';g.fillStyle='#9fb6dc';g.strokeStyle='rgba(255,255,255,.12)';g.lineWidth=1;
  for(let i=0;i<=2;i++){const y=pt+H-H*i/2;g.beginPath();g.moveTo(pl,y);g.lineTo(w-pr,y);g.stroke();g.textAlign='right';g.fillText(Math.round(max*i/2),pl-5,y+4)}
  g.textAlign='left';g.fillText('-10 min',pl,h-4);g.textAlign='right';g.fillText('ahora',w-pr,h-4);
  if(spd.length<2){g.textAlign='center';g.fillText('Inicia el recorrido para ver la velocidad',w/2,h/2);return}
- g.beginPath();g.strokeStyle='#087a4a';g.lineWidth=2.5;g.lineJoin='round';
+ g.beginPath();g.strokeStyle='#38bdf8';g.lineWidth=2.5;g.lineJoin='round';
  spd.forEach((s,i)=>{const x=pl+W*(1-(now-s.t)/600000),y=pt+H-H*s.v/max;i?g.lineTo(x,y):g.moveTo(x,y)});
  g.stroke();
  $('vnow').textContent=spd[spd.length-1].v.toFixed(1)+' km/h';
@@ -223,7 +311,7 @@ async function keepAwake(){try{if('wakeLock' in navigator)wake=await navigator.w
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&watchId!==null)keepAwake()});
 
 /* ---- destino y ruta más rápida ---- */
-let dest=null,destMarker=null,routeLine=null,pickMode=false,hasFix=false,lastRoute={t:0,la:0,lo:0},routeCtl=null;
+let dest=null,destMarker=null,routeLine=null,routeCase=null,pickMode=false,hasFix=false,lastRoute={t:0,la:0,lo:0},routeCtl=null;
 const MODES={car:'routed-car',foot:'routed-foot',bike:'routed-bike'};
 function setDest(ll){
  dest=[ll.lat,ll.lng];
@@ -245,8 +333,8 @@ async function getRoute(fit){
   const j=await r.json();
   if(j.code!=='Ok'||!j.routes.length)throw new Error('sin ruta');
   const rt=j.routes[0],ll=rt.geometry.coordinates.map(c=>[c[1],c[0]]),first=!routeLine;
-  if(routeLine)routeLine.setLatLngs(ll);
-  else routeLine=L.polyline(ll,{color:'#1a73e8',weight:5,opacity:.85}).addTo(map);
+  if(routeLine){routeLine.setLatLngs(ll);routeCase.setLatLngs(ll)}
+  else{routeCase=L.polyline(ll,{color:'#0b3a8c',weight:9,opacity:.6}).addTo(map);routeLine=L.polyline(ll,{color:'#38bdf8',weight:5,opacity:.95,lineCap:'round'}).addTo(map)}
   $('rdist').textContent=rt.distance<1000?Math.round(rt.distance)+' m':(rt.distance/1000).toFixed(2)+' km';
   $('rtime').textContent=rt.duration<60?'< 1 min':fmt(rt.duration);
   $('reta').textContent=new Date(Date.now()+rt.duration*1000).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
@@ -264,17 +352,18 @@ function maybeReroute(){
  if(hav([o.lat,o.lng],dest)<25){$('msg').textContent='🏁 Llegaste al destino.';return}
  if(Date.now()-lastRoute.t>20000&&hav([o.lat,o.lng],[lastRoute.la,lastRoute.lo])>30)getRoute(false);
 }
-map.on('click',e=>{if(!pickMode)return;pickMode=false;setDest(e.latlng)});
-$('pick').onclick=()=>{pickMode=true;$('msg').textContent='Toca el mapa para marcar el destino.'};
+function setPick(v){pickMode=v;$('mapwrap').classList.toggle('picking',v)}
+map.on('click',e=>{if(!pickMode)return;setPick(false);setDest(e.latlng)});
+$('pick').onclick=()=>{setPick(!pickMode);$('msg').textContent=pickMode?'Toca el mapa para marcar el destino.':''};
 $('mode').onchange=()=>{
  marker.setIcon(iconFor($('mode').value));
  try{localStorage.setItem('yourruta:mode',$('mode').value)}catch(e){}
  getRoute(false);
 };
 $('clear').onclick=()=>{
- dest=null;pickMode=false;
+ dest=null;setPick(false);
  if(destMarker){map.removeLayer(destMarker);destMarker=null}
- if(routeLine){map.removeLayer(routeLine);routeLine=null}
+ if(routeLine){map.removeLayer(routeLine);map.removeLayer(routeCase);routeLine=null;routeCase=null}
  $('dest').style.display='none';$('msg').textContent='Destino quitado.';
 };
 
@@ -382,8 +471,14 @@ $('locate').onclick=()=>{
  navigator.geolocation.getCurrentPosition(p=>setPosition(p,false),error,{enableHighAccuracy:true,timeout:20000,maximumAge:0});
 };
 $('center').onclick=()=>{follow=true;map.setView(marker.getLatLng(),18)};
-$('sat').onclick=()=>{if(!map.hasLayer(satellite))map.addLayer(satellite);if(map.hasLayer(roads))map.removeLayer(roads)};
-$('road').onclick=()=>{if(!map.hasLayer(roads))map.addLayer(roads);if(map.hasLayer(satellite))map.removeLayer(satellite)};
+$('sat').onclick=()=>{if(!map.hasLayer(satellite))map.addLayer(satellite);if(map.hasLayer(roads))map.removeLayer(roads);$('sat').classList.add('on');$('road').classList.remove('on')};
+$('road').onclick=()=>{if(!map.hasLayer(roads))map.addLayer(roads);if(map.hasLayer(satellite))map.removeLayer(satellite);$('road').classList.add('on');$('sat').classList.remove('on')};
+$('fit').onclick=()=>{
+ const b=L.latLngBounds([]);today().pts.forEach(p=>b.extend([p[0],p[1]]));if(routeLine)b.extend(routeLine.getBounds());
+ if(b.isValid()){follow=false;map.fitBounds(b,{padding:[40,40],maxZoom:18})}else $('msg').textContent='Aún no hay recorrido para mostrar.';
+};
+$('full').onclick=()=>{const w=$('mapwrap'),f=w.classList.toggle('full');$('full').textContent=f?'✕':'⛶';document.body.style.overflow=f?'hidden':'';document.body.classList.toggle('mapfull',f);setTimeout(()=>map.invalidateSize(),50)};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('mapwrap').classList.contains('full'))$('full').click()});
 $('start').onclick=()=>{
  if(!navigator.geolocation){$('msg').textContent='Este navegador no admite GPS.';return}
  if(watchId!==null)return;
@@ -416,13 +511,14 @@ $('gpx').onclick=()=>{
 };
 $('reset').onclick=()=>{
  if(!confirm('¿Borrar el recorrido de hoy?'))return;
- delete store[dayKey()];save();line.setLatLngs([]);render();
+ delete store[dayKey()];save();line.setLatLngs([]);lineCase.setLatLngs([]);render();
 };
+
 
 /* ---- inicio ---- */
 try{const m=localStorage.getItem('yourruta:mode');if(MODES[m]){$('mode').value=m;marker.setIcon(iconFor(m))}}catch(e){}
 drawChart();window.addEventListener('resize',drawChart);
-line.setLatLngs(segments());
+{const sg=segments();line.setLatLngs(sg);lineCase.setLatLngs(sg)}
 render();
 const pts=today().pts;
 if(pts.length){const l=pts[pts.length-1];map.setView([l[0],l[1]],16)}
