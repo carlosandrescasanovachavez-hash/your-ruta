@@ -14,6 +14,9 @@ Inventario de la casa con escáner de código de barras. Funciona en el navegado
 - **Lista de compras** automática con lo agotado o bajo el mínimo; se copia para WhatsApp.
 - **Historial** por día, exportación a CSV (abre en Excel), respaldo y restauración en JSON.
 - Productos sin código (fruta, verdura, granel) y datos de ejemplo para probar.
+- **Reporte PDF** (Historial → Reporte): resumen, gráfico de salidas, productos que más salen, stock de
+  cada producto, lista para comprar, detalle de salidas, movimientos por persona y glosario.
+  Elige el período (7, 30, 90 días o todo) y en la ventana de impresión escoge “Guardar como PDF”.
 - **Nube con Google Sheets** (opcional): el mismo inventario en varios celulares, con el nombre de
   quién hizo cada movimiento. Funciona sin internet y sube los cambios cuando vuelve la señal.
 
