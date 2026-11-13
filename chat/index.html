@@ -166,6 +166,22 @@
   .v-bar{display:flex;gap:10px;width:100%;max-width:420px;margin-top:16px}
   .v-bar .btn{flex:1;text-align:center;text-decoration:none;margin:0}
   .v-bar .btn.dark{background:rgba(255,255,255,.15)}
+  .photo-menu{position:fixed;display:none;flex-direction:column;background:var(--them);color:var(--them-text);border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.2);z-index:55;overflow:hidden;min-width:210px}
+  .photo-menu.on{display:flex;animation:pop .15s}
+  .photo-menu button{border:none;background:transparent;color:inherit;font-family:inherit;font-size:15px;text-align:left;padding:13px 16px;cursor:pointer}
+  .photo-menu button+button{border-top:1px solid rgba(0,0,0,.06)}
+  .camera{position:fixed;inset:0;background:#000;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:130;padding:12px;padding-top:calc(12px + env(safe-area-inset-top));padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+  .camera.on{display:flex}
+  .cam-view{flex:1;width:100%;display:flex;align-items:center;justify-content:center;min-height:0}
+  .cam-view video,.cam-view img{max-width:100%;max-height:100%;border-radius:18px;background:#111}
+  .mirror{transform:scaleX(-1)}
+  .cam-bar{display:flex;align-items:center;justify-content:space-around;width:100%;max-width:420px;margin-top:14px;gap:10px}
+  .cam-btn{border:none;background:rgba(255,255,255,.15);color:#fff;width:52px;height:52px;border-radius:50%;font-size:22px;cursor:pointer}
+  .shutter{width:74px;height:74px;border-radius:50%;border:5px solid #fff;background:var(--primary);cursor:pointer;box-shadow:0 0 0 3px rgba(0,0,0,.4)}
+  .shutter:active{transform:scale(.9)}
+  .cam-bar .btn{flex:1;margin:0}
+  .cam-bar .btn.dark{background:rgba(255,255,255,.15)}
+  .cam-flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:131;transition:opacity .25s}
   .tip{background:rgba(255,122,162,.12);border-radius:14px;padding:10px 12px;font-size:13px;margin-bottom:8px;display:flex;gap:8px}
 </style>
 </head>
@@ -211,6 +227,7 @@
       <textarea id="input" rows="1" placeholder="Escribe algo bonito…"></textarea>
       <button class="icon-btn" id="photoBtn" title="Enviar foto">📷</button>
       <input type="file" id="photoInput" accept="image/*" hidden>
+      <input type="file" id="cameraInput" accept="image/*" capture="user" hidden>
     </div>
     <button class="send" id="sendBtn" title="Enviar">💌</button>
   </div>
@@ -244,6 +261,30 @@
   </div>
 </div>
 
+<!-- Menú de foto -->
+<div class="photo-menu" id="photoMenu">
+  <button id="takePhoto">📸 Tomar foto</button>
+  <button id="pickPhoto">🖼️ Elegir de la galería</button>
+</div>
+
+<!-- Cámara -->
+<div class="camera" id="camera">
+  <div class="cam-view">
+    <video id="camVideo" autoplay playsinline muted></video>
+    <img id="camShot" alt="Tu foto" style="display:none">
+  </div>
+  <div class="cam-bar" id="camLive">
+    <button class="cam-btn" id="camClose" title="Cerrar">✕</button>
+    <button class="shutter" id="camShutter" title="Sacar foto"></button>
+    <button class="cam-btn" id="camFlip" title="Cambiar cámara">🔄</button>
+  </div>
+  <div class="cam-bar" id="camReview" style="display:none">
+    <button class="btn dark" id="camRetake">↺ Repetir</button>
+    <button class="btn" id="camSend">Enviar 💌</button>
+  </div>
+</div>
+<div class="cam-flash" id="camFlash"></div>
+
 <!-- Visor de fotos -->
 <div class="viewer" id="viewer">
   <img id="viewerImg" alt="Foto">
@@ -276,7 +317,7 @@
     <h2>💡 Cómo se usa</h2>
     <p class="hint">Todo lo que necesitas saber en 30 segundos.</p>
     <div class="tip">💌 <span>Escribe y toca el sobre para enviar. <b>Enter</b> envía, <b>Shift+Enter</b> hace salto de línea.</span></div>
-    <div class="tip">📷 <span>Toca la <b>cámara</b> para enviar una foto. Si escribiste algo antes, va como texto de la foto.</span></div>
+    <div class="tip">📷 <span>Toca la <b>cámara</b> para <b>sacarte una foto</b> o elegir una de la galería. Si escribiste algo antes, va como texto de la foto.</span></div>
     <div class="tip">😊 <span>Abre el panel de emojis con la carita. Si envías solo emojis, salen <b>gigantes</b>.</span></div>
     <div class="tip">❤️ <span>Toca un mensaje para <b>reaccionar</b>, responder o copiarlo. Doble toque = corazón rápido.</span></div>
     <div class="tip">✨ <span>Las frases rápidas de abajo envían mensajes cariñosos con un toque.</span></div>
@@ -862,19 +903,85 @@ $('#viewerClose').onclick=()=>$('#viewer').classList.remove('on');
 $('#viewer').onclick=e=>{ if(e.target.id==='viewer') $('#viewer').classList.remove('on') };
 
 /* ---------------- Enviar foto ---------------- */
-$('#photoBtn').onclick=()=>$('#photoInput').click();
-$('#photoInput').onchange=async e=>{
-  const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return;
-  if(f.type && !f.type.startsWith('image/')) return alert('Solo se pueden enviar fotos 📷');
+async function sendPhotoFile(f){
+  if(f.type && !f.type.startsWith('image/')){ alert('Solo se pueden enviar fotos 📷'); return false }
   const caption=input.value.trim().slice(0,2000);
   $('#photoBtn').textContent='⏳';
   try{
     await Chat.sendPhoto(f, caption);
     input.value=''; input.style.height='auto';
     replyTo=null; $('#replyBar').classList.remove('on'); stopTyping(); askNotify();
-  }catch(err){ console.error(err); alert('No se pudo enviar esa foto 😢 Prueba con otra.') }
+    return true;
+  }catch(err){ console.error(err); alert('No se pudo enviar esa foto 😢 Prueba con otra.'); return false }
   finally{ $('#photoBtn').textContent='📷' }
+}
+const photoMenu=$('#photoMenu');
+$('#photoBtn').onclick=e=>{
+  e.stopPropagation();
+  if(photoMenu.classList.toggle('on')){
+    const r=$('#photoBtn').getBoundingClientRect();
+    photoMenu.style.left=Math.max(8,Math.min(window.innerWidth-photoMenu.offsetWidth-8, r.right-photoMenu.offsetWidth))+'px';
+    photoMenu.style.top=(r.top-photoMenu.offsetHeight-10)+'px';
+  }
 };
+document.addEventListener('click',e=>{ if(!photoMenu.contains(e.target)) photoMenu.classList.remove('on') });
+$('#pickPhoto').onclick=()=>{ photoMenu.classList.remove('on'); $('#photoInput').click() };
+$('#takePhoto').onclick=()=>{ photoMenu.classList.remove('on'); openCamera() };
+for(const id of ['#photoInput','#cameraInput']) $(id).onchange=e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) sendPhotoFile(f);
+};
+
+/* ---------------- Cámara ---------------- */
+const Cam={stream:null, blob:null, url:null, facing:local.facing||'user'};
+async function openCamera(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return $('#cameraInput').click();
+  $('#camera').classList.add('on'); showLive();
+  try{ await startCam() }
+  catch(e){
+    closeCamera();
+    if(e && e.name==='NotAllowedError') alert('Para sacar fotos necesito permiso de cámara 📸\nActívalo en los ajustes del navegador para esta página.');
+    else $('#cameraInput').click();   // sin cámara en vivo: usa la cámara del teléfono
+  }
+}
+async function startCam(){
+  stopCam();
+  Cam.stream=await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:Cam.facing, width:{ideal:1920}, height:{ideal:1080}}});
+  const v=$('#camVideo'); v.srcObject=Cam.stream;
+  v.classList.toggle('mirror', Cam.facing==='user');
+  try{ await v.play() }catch(e){}
+}
+function stopCam(){ if(Cam.stream){ Cam.stream.getTracks().forEach(t=>t.stop()); Cam.stream=null } $('#camVideo').srcObject=null }
+function showLive(){ $('#camVideo').style.display=''; $('#camShot').style.display='none'; $('#camLive').style.display='flex'; $('#camReview').style.display='none' }
+function clearShot(){ if(Cam.url){ URL.revokeObjectURL(Cam.url); Cam.url=null } Cam.blob=null }
+function closeCamera(){ stopCam(); clearShot(); $('#camera').classList.remove('on') }
+$('#camClose').onclick=closeCamera;
+$('#camFlip').onclick=async()=>{
+  Cam.facing = Cam.facing==='user' ? 'environment' : 'user'; local.facing=Cam.facing; saveLocal();
+  try{ await startCam() }catch(e){ alert('No pude cambiar de cámara 😕') }
+};
+$('#camShutter').onclick=async()=>{
+  const v=$('#camVideo'); if(!v.videoWidth) return;
+  const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
+  const x=c.getContext('2d');
+  if(Cam.facing==='user'){ x.translate(c.width,0); x.scale(-1,1) }   // la selfie queda como la viste
+  x.drawImage(v,0,0,c.width,c.height);
+  const fl=$('#camFlash'); fl.style.opacity='.85'; setTimeout(()=>fl.style.opacity='0',90);
+  Cam.blob=await new Promise(ok=>c.toBlob(ok,'image/jpeg',0.92));
+  if(!Cam.blob) return;
+  stopCam();
+  Cam.url=URL.createObjectURL(Cam.blob);
+  $('#camShot').src=Cam.url; $('#camShot').style.display=''; $('#camVideo').style.display='none';
+  $('#camLive').style.display='none'; $('#camReview').style.display='flex';
+};
+$('#camRetake').onclick=async()=>{ clearShot(); showLive(); try{ await startCam() }catch(e){ closeCamera() } };
+$('#camSend').onclick=async()=>{
+  if(!Cam.blob) return;
+  const b=Cam.blob; $('#camSend').disabled=true;
+  if(await sendPhotoFile(b)) closeCamera();
+  $('#camSend').disabled=false;
+};
+window.addEventListener('pagehide',stopCam);
+document.addEventListener('visibilitychange',()=>{ if(document.hidden && Cam.stream){ stopCam(); if($('#camera').classList.contains('on') && !Cam.blob) closeCamera() } });
 
 $('#cancelReply').onclick=()=>{ replyTo=null; $('#replyBar').classList.remove('on') };
 
