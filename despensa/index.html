@@ -404,10 +404,10 @@ details.how[open] > summary{display:none}
 <script type="text/plain" id="gsCode">
 /**
  * Mi Despensa — sincronización con Google Sheets
- * Pega este código completo en Extensiones → Apps Script de tu planilla
- * e impleméntalo como "Aplicación web" (Ejecutar como: Yo · Quién tiene acceso: Cualquier persona).
+ * Pega este código completo en un proyecto nuevo de script.google.com (o en Extensiones → Apps Script
+ * de una planilla) e impleméntalo como "Aplicación web" (Ejecutar como: Yo · Quién tiene acceso: Cualquier persona).
+ * Si el proyecto no está dentro de una planilla, la primera vez crea sola la planilla "Mi Despensa" en tu Drive.
  * No edites la planilla a mano: los cambios se hacen desde la app.
- * @OnlyCurrentDoc
  */
 var CLAVE = '__CLAVE__'; // llave secreta: debe ser la misma que tiene la app
 
@@ -444,7 +444,7 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(25000)) return salida({ ok: false, error: 'La planilla está ocupada, reintenta' });
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = libro();
     var M = abrir(ss, 'Movimientos'), P = abrir(ss, 'Productos');
     quitarHojaVacia(ss);
     if (req.action === 'info') {
@@ -471,6 +471,16 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function libro() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (ss) return ss;
+  var props = PropertiesService.getScriptProperties(), id = props.getProperty('sheetId');
+  if (id) { try { return SpreadsheetApp.openById(id); } catch (x) {} }
+  ss = SpreadsheetApp.create('Mi Despensa');
+  props.setProperty('sheetId', ss.getId());
+  return ss;
 }
 
 function abrir(ss, nombre) {
@@ -1150,12 +1160,12 @@ function renderCloud(){
       <details class="how" id="cloudHow">
         <summary class="btn sm primary">Conectar con Google Sheets</summary>
         <ol class="steps">
-          <li><b>Hazlo desde un computador</b> (una sola vez). Abre esta misma app en el computador y crea una planilla nueva en <a href="https://sheets.new" target="_blank" rel="noopener">sheets.new</a>. Ponle de nombre “Mi Despensa”.</li>
-          <li>En la planilla, menú <b>Extensiones → Apps Script</b>. Borra lo que aparece, pega el código y guarda (ícono de disquete).
+          <li>Se hace una sola vez, mejor en un computador. En el celular usa Chrome con <b>⋮ → Sitio de escritorio</b> activado. Toca <b>Copiar código</b>:
             <div class="row wrapy" style="margin-top:8px"><button class="btn sm" type="button" id="copyGs">Copiar código</button></div>
             <textarea class="codebox" id="gsBox" readonly hidden></textarea></li>
+          <li>Entra a <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com</a> → <b>Nuevo proyecto</b>. Borra lo que aparece, pega el código y guarda (ícono de disquete). La planilla “Mi Despensa” se crea sola en tu Drive.</li>
           <li>Arriba a la derecha: <b>Implementar → Nueva implementación</b>. En el engranaje elige <b>Aplicación web</b>. “Ejecutar como”: <b>Yo</b>. “Quién tiene acceso”: <b>Cualquier persona</b>. Toca <b>Implementar</b>.</li>
-          <li>Google te pide autorizar: elige tu cuenta → <b>Configuración avanzada</b> → <b>Ir a … (no seguro)</b> → <b>Permitir</b>. Aparece ese aviso porque el script es tuyo y no está publicado; solo puede usar esta planilla.</li>
+          <li>Google te pide autorizar: elige tu cuenta → <b>Configuración avanzada</b> → <b>Ir a … (no seguro)</b> → <b>Permitir</b>. Aparece ese aviso porque el script es tuyo y no está publicado. Solo trabaja con la planilla “Mi Despensa”.</li>
           <li>Copia la <b>URL de la aplicación web</b> (termina en <code class="code">/exec</code>) y pégala aquí:
             <form class="cloudrow" id="cloudForm" autocomplete="off"><input type="url" id="cloudUrl" placeholder="https://script.google.com/macros/s/…/exec" required aria-label="URL de la aplicación web"><button class="btn sm primary" id="cloudGo">Conectar</button></form></li>
           <li>Listo. Toca <b>“Enviar link a otro celular”</b> y ábrelo en cada teléfono del negocio: se conectan solos.</li>
