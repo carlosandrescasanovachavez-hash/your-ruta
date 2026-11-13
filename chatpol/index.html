@@ -447,6 +447,14 @@ try{
   const d=JSON.parse(localStorage.getItem(DATA_KEY));
   if(d){ Object.assign(state, d); if(d.seenHelp) local.seenHelp=true; delete state.me; delete state.seenHelp }
 }catch(e){}
+/* Quita los nombres/avatares románticos de la versión anterior (solo si siguen los de fábrica) */
+function migrateNames(){
+  const u=state.users; let changed=false;
+  if(u.b && /^mi amor$/i.test((u.b.name||'').trim())){ u.b.name='Contacto'; changed=true }
+  if(u.a && u.a.avatar==='🐻' && u.b && u.b.avatar==='🐰'){ u.a.avatar='🙂'; u.b.avatar='😎'; changed=true }
+  return changed;
+}
+let namesMigrated = migrateNames();
 const persist = () => { try{ localStorage.setItem(DATA_KEY, JSON.stringify(state)) }catch(e){} };
 const msgLabel = m => m.text || (m.img?'📷 Foto' : m.loc?(m.loc.live?'🛰️ Ubicación en tiempo real':'📍 Ubicación'):'');
 const userOf = k => state.users[k] || {name:'?',avatar:'💬'};
@@ -612,7 +620,9 @@ function applyClear(ts){
 }
 function applySettings(s, sv){
   const c=cleanSettings(s); if(!c || typeof sv!=='number' || sv<=state.sv) return false;
-  Object.assign(state, c, {sv}); return true;
+  Object.assign(state, c, {sv});
+  if(migrateNames()){ state.sv=Date.now(); setTimeout(()=>Relay.send({t:'settings', s:settingsPayload(), sv:state.sv}),500) }
+  return true;
 }
 const lastFromOther = () => { for(let i=state.messages.length-1;i>=0;i--) if(state.messages[i].from!==local.me) return state.messages[i].ts; return 0 };
 const wire = m => { const c=Object.assign({},m); delete c.got; return c };
@@ -1306,6 +1316,7 @@ $('#closeHelp').onclick=()=>{ $('#helpModal').classList.remove('on'); local.seen
 document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{ if(e.target===bg){ bg.classList.remove('on'); document.body.className=state.theme||'' } }));
 
 /* ---------------- Inicio ---------------- */
+if(namesMigrated){ state.sv=Date.now(); persist() }
 render(true);
 Relay.start();
 if(local.live && local.live.until>Date.now() && state.messages.some(m=>m.id===local.live.id)){ Geo.live=local.live; beginWatch() }
