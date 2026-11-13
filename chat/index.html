@@ -181,6 +181,11 @@
   .shutter:active{transform:scale(.9)}
   .cam-bar .btn{flex:1;margin:0}
   .cam-bar .btn.dark{background:rgba(255,255,255,.15)}
+  .cam-error{display:none;flex-direction:column;gap:10px;width:100%;max-width:420px;margin:auto;color:#fff;text-align:center}
+  .cam-error.on{display:flex}
+  .cam-error p{font-size:15px;line-height:1.45;margin-bottom:6px;white-space:pre-line}
+  .cam-error .big-i{font-size:54px}
+  .cam-error .btn.dark{background:rgba(255,255,255,.15)}
   .cam-flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:131;transition:opacity .25s}
   .tip{background:rgba(255,122,162,.12);border-radius:14px;padding:10px 12px;font-size:13px;margin-bottom:8px;display:flex;gap:8px}
 </style>
@@ -269,7 +274,14 @@
 
 <!-- Cámara -->
 <div class="camera" id="camera">
-  <div class="cam-view">
+  <div class="cam-error" id="camError">
+    <div class="big-i">📸</div>
+    <p id="camErrText"></p>
+    <button class="btn" id="camNative">📱 Abrir la cámara del teléfono</button>
+    <button class="btn dark" id="camErrRetry">↻ Intentar de nuevo</button>
+    <button class="btn dark" id="camErrClose">Cerrar</button>
+  </div>
+  <div class="cam-view" id="camView">
     <video id="camVideo" autoplay playsinline muted></video>
     <img id="camShot" alt="Tu foto" style="display:none">
   </div>
@@ -933,16 +945,34 @@ for(const id of ['#photoInput','#cameraInput']) $(id).onchange=e=>{
 
 /* ---------------- Cámara ---------------- */
 const Cam={stream:null, blob:null, url:null, facing:local.facing||'user'};
+const IN_APP = /FBAN|FBAV|FB_IAB|Instagram|WhatsApp|Messenger|Line\/|MicroMessenger|; wv\)/i.test(navigator.userAgent);
+function camProblem(text){
+  stopCam(); clearShot();
+  $('#camView').style.display='none'; $('#camLive').style.display='none'; $('#camReview').style.display='none';
+  $('#camErrText').textContent=text; $('#camError').classList.add('on');
+  $('#camera').classList.add('on');
+}
+function camErrorText(e){
+  const n=e&&e.name||'';
+  let t;
+  if(n==='NotAllowedError'||n==='SecurityError') t='El navegador no dio permiso para usar la cámara.\nPara activarlo: toca el candado 🔒 (o "Aa") junto a la dirección → Permisos / Cámara → Permitir, y recarga la página.';
+  else if(n==='NotFoundError'||n==='OverconstrainedError') t='No encontré una cámara en este aparato.';
+  else if(n==='NotReadableError'||n==='AbortError') t='La cámara está ocupada por otra app (videollamada, Instagram…). Ciérrala e intenta de nuevo.';
+  else if(n==='NoMediaDevices') t='Este navegador no deja abrir la cámara dentro del chat.';
+  else t='No pude abrir la cámara dentro del chat'+(n?` (${n})`:'')+'.';
+  if(IN_APP) t='Estás viendo el chat dentro de otra app (WhatsApp, Instagram…), y esas apps bloquean la cámara.\nToca ⋮ o ⋯ arriba → "Abrir en Chrome / Safari".\n\n'+t;
+  return t+'\n\nO usa la cámara normal del teléfono:';
+}
 async function openCamera(){
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return $('#cameraInput').click();
+  $('#camError').classList.remove('on'); $('#camView').style.display='';
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return camProblem(camErrorText({name:'NoMediaDevices'}));
   $('#camera').classList.add('on'); showLive();
   try{ await startCam() }
-  catch(e){
-    closeCamera();
-    if(e && e.name==='NotAllowedError') alert('Para sacar fotos necesito permiso de cámara 📸\nActívalo en los ajustes del navegador para esta página.');
-    else $('#cameraInput').click();   // sin cámara en vivo: usa la cámara del teléfono
-  }
+  catch(e){ console.warn('cámara', e); camProblem(camErrorText(e)) }
 }
+$('#camNative').onclick=()=>{ $('#cameraInput').click(); closeCamera() };   // viene de un toque: el navegador lo permite
+$('#camErrRetry').onclick=()=>openCamera();
+$('#camErrClose').onclick=()=>closeCamera();
 async function startCam(){
   stopCam();
   Cam.stream=await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:Cam.facing, width:{ideal:1920}, height:{ideal:1080}}});
@@ -953,11 +983,11 @@ async function startCam(){
 function stopCam(){ if(Cam.stream){ Cam.stream.getTracks().forEach(t=>t.stop()); Cam.stream=null } $('#camVideo').srcObject=null }
 function showLive(){ $('#camVideo').style.display=''; $('#camShot').style.display='none'; $('#camLive').style.display='flex'; $('#camReview').style.display='none' }
 function clearShot(){ if(Cam.url){ URL.revokeObjectURL(Cam.url); Cam.url=null } Cam.blob=null }
-function closeCamera(){ stopCam(); clearShot(); $('#camera').classList.remove('on') }
+function closeCamera(){ stopCam(); clearShot(); $('#camera').classList.remove('on'); $('#camError').classList.remove('on'); $('#camView').style.display='' }
 $('#camClose').onclick=closeCamera;
 $('#camFlip').onclick=async()=>{
   Cam.facing = Cam.facing==='user' ? 'environment' : 'user'; local.facing=Cam.facing; saveLocal();
-  try{ await startCam() }catch(e){ alert('No pude cambiar de cámara 😕') }
+  try{ await startCam() }catch(e){ Cam.facing = Cam.facing==='user' ? 'environment' : 'user'; try{ await startCam() }catch(e2){ camProblem(camErrorText(e2)) } }
 };
 $('#camShutter').onclick=async()=>{
   const v=$('#camVideo'); if(!v.videoWidth) return;
@@ -973,7 +1003,7 @@ $('#camShutter').onclick=async()=>{
   $('#camShot').src=Cam.url; $('#camShot').style.display=''; $('#camVideo').style.display='none';
   $('#camLive').style.display='none'; $('#camReview').style.display='flex';
 };
-$('#camRetake').onclick=async()=>{ clearShot(); showLive(); try{ await startCam() }catch(e){ closeCamera() } };
+$('#camRetake').onclick=async()=>{ clearShot(); showLive(); try{ await startCam() }catch(e){ camProblem(camErrorText(e)) } };
 $('#camSend').onclick=async()=>{
   if(!Cam.blob) return;
   const b=Cam.blob; $('#camSend').disabled=true;
