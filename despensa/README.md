@@ -14,6 +14,26 @@ Inventario de la casa con escáner de código de barras. Funciona en el navegado
 - **Lista de compras** automática con lo agotado o bajo el mínimo; se copia para WhatsApp.
 - **Historial** por día, exportación a CSV (abre en Excel), respaldo y restauración en JSON.
 - Productos sin código (fruta, verdura, granel) y datos de ejemplo para probar.
+- **Nube con Google Sheets** (opcional): el mismo inventario en varios celulares, con el nombre de
+  quién hizo cada movimiento. Funciona sin internet y sube los cambios cuando vuelve la señal.
+
+## Conectar a Google Sheets (varios celulares)
+
+Se hace **una sola vez, desde un computador**. Los pasos también están en la app, en la pestaña
+**Historial → Nube**:
+
+1. Abre la app en el computador → Historial → **Conectar con Google Sheets**.
+2. Crea una planilla nueva (sheets.new) → **Extensiones → Apps Script** → pega el código del botón
+   **Copiar código** → guarda.
+3. **Implementar → Nueva implementación → Aplicación web**. Ejecutar como: **Yo**.
+   Quién tiene acceso: **Cualquier persona** → Implementar → autoriza con tu cuenta.
+4. Pega en la app la **URL de la aplicación web** (termina en `/exec`) → **Conectar**.
+5. Toca **Enviar link a otro celular** y ábrelo en cada teléfono: se conectan solos.
+
+En la planilla quedan dos hojas: **Productos** (con el stock actual) y **Movimientos** (fecha,
+producto, tipo, cantidad y usuario). El código lleva una clave secreta propia y solo puede usar esa
+planilla. El link de conexión funciona como llave, así que compártelo solo con tu equipo.
+No edites la planilla a mano: haz los cambios desde la app.
 
 ## Publicarla (GitHub Pages)
 
