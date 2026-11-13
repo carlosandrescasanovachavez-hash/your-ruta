@@ -154,6 +154,18 @@
   .status{font-size:13px;padding:10px 12px;border-radius:14px;margin-bottom:14px;background:rgba(0,0,0,.04)}
   .status.ok{background:rgba(52,195,154,.15)}
   .status.err{background:rgba(229,72,77,.12);color:#c0262c}
+  .bubble.has-photo{padding:4px}
+  .photo{width:min(240px,62vw);border-radius:16px;overflow:hidden;background:rgba(0,0,0,.08);position:relative}
+  .photo img{width:100%;height:100%;object-fit:cover;display:block}
+  .photo.loading img{visibility:hidden}
+  .photo.loading::after{content:"📷 recibiendo foto…";position:absolute;inset:0;display:grid;place-items:center;font-size:13px;color:var(--muted)}
+  .cap{padding:6px 10px 4px}
+  .viewer{position:fixed;inset:0;background:rgba(10,5,10,.94);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:120;padding:16px}
+  .viewer.on{display:flex;animation:pop .2s}
+  .viewer img{max-width:100%;max-height:78dvh;border-radius:14px}
+  .v-bar{display:flex;gap:10px;width:100%;max-width:420px;margin-top:16px}
+  .v-bar .btn{flex:1;text-align:center;text-decoration:none;margin:0}
+  .v-bar .btn.dark{background:rgba(255,255,255,.15)}
   .tip{background:rgba(255,122,162,.12);border-radius:14px;padding:10px 12px;font-size:13px;margin-bottom:8px;display:flex;gap:8px}
 </style>
 </head>
@@ -197,6 +209,8 @@
     <div class="input-wrap">
       <button class="icon-btn" id="emojiBtn" title="Emojis">😊</button>
       <textarea id="input" rows="1" placeholder="Escribe algo bonito…"></textarea>
+      <button class="icon-btn" id="photoBtn" title="Enviar foto">📷</button>
+      <input type="file" id="photoInput" accept="image/*" hidden>
     </div>
     <button class="send" id="sendBtn" title="Enviar">💌</button>
   </div>
@@ -230,6 +244,12 @@
   </div>
 </div>
 
+<!-- Visor de fotos -->
+<div class="viewer" id="viewer">
+  <img id="viewerImg" alt="Foto">
+  <div class="v-bar"><a class="btn" id="viewerSave" download="foto.jpg">Guardar 💾</a><button class="btn dark" id="viewerClose">Cerrar ✕</button></div>
+</div>
+
 <!-- Modal de conexión -->
 <div class="modal-bg" id="connectModal">
   <div class="modal">
@@ -256,6 +276,7 @@
     <h2>💡 Cómo se usa</h2>
     <p class="hint">Todo lo que necesitas saber en 30 segundos.</p>
     <div class="tip">💌 <span>Escribe y toca el sobre para enviar. <b>Enter</b> envía, <b>Shift+Enter</b> hace salto de línea.</span></div>
+    <div class="tip">📷 <span>Toca la <b>cámara</b> para enviar una foto. Si escribiste algo antes, va como texto de la foto.</span></div>
     <div class="tip">😊 <span>Abre el panel de emojis con la carita. Si envías solo emojis, salen <b>gigantes</b>.</span></div>
     <div class="tip">❤️ <span>Toca un mensaje para <b>reaccionar</b>, responder o copiarlo. Doble toque = corazón rápido.</span></div>
     <div class="tip">✨ <span>Las frases rápidas de abajo envían mensajes cariñosos con un toque.</span></div>
@@ -369,11 +390,57 @@ async function unseal(str){
   return JSON.parse(TD.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:a.slice(0,12)}, KEY, a.slice(12))));
 }
 
+/* ---------------- Fotos (guardadas en IndexedDB de cada teléfono) ---------------- */
+const PhotoDB = {
+  db:null,
+  open(){ return this.db || (this.db=new Promise((ok,ko)=>{ const r=indexedDB.open('nuestro-chat-fotos',1); r.onupgradeneeded=()=>r.result.createObjectStore('p'); r.onsuccess=()=>ok(r.result); r.onerror=()=>ko(r.error) })) },
+  async run(mode, fn){ const db=await this.open(); return new Promise(ok=>{ const tx=db.transaction('p',mode); const q=fn(tx.objectStore('p')); tx.oncomplete=()=>ok(q&&q.result); tx.onerror=()=>ok(null); tx.onabort=()=>ok(null) }) },
+  async get(id){ try{ return (await this.run('readonly', st=>st.get(id))) || null }catch(e){ return null } },
+  async put(id,blob){ try{ await this.run('readwrite', st=>st.put(blob,id)) }catch(e){} },
+  async del(id){ try{ await this.run('readwrite', st=>st.delete(id)) }catch(e){} },
+  async clear(){ try{ await this.run('readwrite', st=>st.clear()) }catch(e){} }
+};
+const photoURLs = new Map();
+async function photoURL(id){
+  if(photoURLs.has(id)) return photoURLs.get(id);
+  const b=await PhotoDB.get(id); if(!b) return null;
+  const u=URL.createObjectURL(b); photoURLs.set(id,u); return u;
+}
+async function hydratePhotos(){
+  for(const el of document.querySelectorAll('img[data-photo]')){
+    if(el.getAttribute('src')) continue;
+    const u=await photoURL(el.dataset.photo);
+    if(u){ el.src=u; el.parentElement.classList.remove('loading') }
+  }
+}
+function dropPhotos(msgs){ msgs.forEach(m=>{ if(m.img){ PhotoDB.del(m.img.id); const u=photoURLs.get(m.img.id); if(u){ URL.revokeObjectURL(u); photoURLs.delete(m.img.id) } } }) }
+function loadImg(file){ return new Promise((ok,ko)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=()=>ko(new Error('img')); i.src=URL.createObjectURL(file) }) }
+async function compressPhoto(file){
+  const img=await loadImg(file);
+  let max=1280, q=0.72, blob=null, w=0, h=0;
+  for(let k=0;k<5;k++){
+    const s=Math.min(1, max/Math.max(img.naturalWidth,img.naturalHeight));
+    w=Math.max(1,Math.round(img.naturalWidth*s)); h=Math.max(1,Math.round(img.naturalHeight*s));
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h);
+    blob=await new Promise(ok=>c.toBlob(ok,'image/jpeg',q));
+    if(blob && blob.size<=350000) break;
+    max=Math.round(max*0.8); q=Math.max(0.5,q-0.07);
+  }
+  URL.revokeObjectURL(img.src);
+  if(!blob) throw new Error('No se pudo procesar la foto');
+  return {blob,w,h};
+}
+const CHUNK = 48000;   // caracteres por pedazo al enviar una foto
+
 /* ---------------- Validación de lo que llega ---------------- */
 const isStr = (v,max) => typeof v==='string' && v.length<=max;
 function cleanMsg(m){
-  if(!m || !isStr(m.id,40) || (m.from!=='a'&&m.from!=='b') || !isStr(m.text,2000) || !m.text || typeof m.ts!=='number') return null;
+  if(!m || !isStr(m.id,40) || (m.from!=='a'&&m.from!=='b') || !isStr(m.text,2000) || typeof m.ts!=='number') return null;
   const c={id:m.id, from:m.from, text:m.text, ts:m.ts};
+  if(m.img && isStr(m.img.id,40) && m.img.w>0 && m.img.h>0 && m.img.w<10000 && m.img.h<10000)
+    c.img={id:m.img.id, w:Math.round(+m.img.w), h:Math.round(+m.img.h)};
+  if(!c.text && !c.img) return null;
   if(isStr(m.replyTo,40)) c.replyTo=m.replyTo;
   if(m.reactions && typeof m.reactions==='object'){
     c.reactions={}; ['a','b'].forEach(k=>{ if(isStr(m.reactions[k],16)) c.reactions[k]=m.reactions[k] });
@@ -423,11 +490,13 @@ function mergeMessages(list, live){
 function applyDeletes(ids){
   const set=new Set(ids.filter(x=>isStr(x,40))); if(!set.size) return;
   state.deleted=[...new Set(state.deleted.concat([...set]))].slice(-500);
+  dropPhotos(state.messages.filter(m=>set.has(m.id)));
   state.messages=state.messages.filter(m=>!set.has(m.id));
 }
 function applyClear(ts){
   if(typeof ts!=='number' || ts<=state.clearedAt) return;
-  state.clearedAt=ts; state.messages=state.messages.filter(m=>m.ts>ts);
+  state.clearedAt=ts; dropPhotos(state.messages.filter(m=>m.ts<=ts));
+  state.messages=state.messages.filter(m=>m.ts>ts);
 }
 function applySettings(s, sv){
   const c=cleanSettings(s); if(!c || typeof sv!=='number' || sv<=state.sv) return false;
@@ -440,6 +509,7 @@ const wire = m => { const c=Object.assign({},m); delete c.got; return c };
 const Relay = {
   enabled:false, clients:[], seen:new Set(), error:'', typing:false, typingTimer:null,
   partnerSeen:0, helloTimer:null,
+  have:new Set(), asked:{}, parts:{}, sending:new Set(), queue:Promise.resolve(),
   get connected(){ return this.clients.some(c=>c.connected) },
   get partnerOnline(){ return Date.now()-this.partnerSeen < ONLINE_MS },
 
@@ -456,7 +526,7 @@ const Relay = {
       c.on('message',(t,p)=>this.receive(TD.decode(p)));
       this.clients.push(c);
     }
-    setInterval(()=>{ if(!document.hidden) this.send({t:'ping'}); updateSubtitle() }, 20000);
+    setInterval(()=>{ if(!document.hidden){ this.send({t:'ping'}); if(this.partnerOnline) this.requestMissing() } updateSubtitle() }, 20000);
     document.addEventListener('visibilitychange',()=>{ if(document.hidden) this.send({t:'bye'}); else this.hello(false) });
     window.addEventListener('pagehide',()=>this.send({t:'bye'}));
   },
@@ -488,9 +558,28 @@ const Relay = {
     let dirty=false;
     switch(o.t){
       case 'msg': {
-        const added=mergeMessages([o.m], true);
+        mergeMessages([o.m], true);
         this.setTyping(false);
         if(o.m && isStr(o.m.id,40)) this.send({t:'ack', ids:[o.m.id]});
+        this.requestMissing();
+        break;
+      }
+      case 'need':
+        (Array.isArray(o.ids)?o.ids:[]).slice(0,20).forEach(id=>{ if(isStr(id,40)) this.queue=this.queue.then(()=>this.sendPhoto(id)) });
+        break;
+      case 'chunk': {
+        if(!isStr(o.id,40) || !Number.isInteger(o.i) || !Number.isInteger(o.of) || o.of<1 || o.of>60 || o.i<0 || o.i>=o.of || !isStr(o.d,CHUNK)) break;
+        if(this.have.has(o.id)) break;
+        const e=this.parts[o.id]=this.parts[o.id]||{n:o.of,p:[],c:0};
+        if(e.n!==o.of) break;
+        if(e.p[o.i]===undefined){ e.p[o.i]=o.d; e.c++ }
+        if(e.c===e.n){
+          delete this.parts[o.id];
+          try{
+            await PhotoDB.put(o.id, new Blob([unb64(e.p.join(''))],{type:'image/jpeg'}));
+            this.have.add(o.id); hydratePhotos();
+          }catch(err){ delete this.asked[o.id] }
+        }
         break;
       }
       case 'ack':
@@ -515,6 +604,7 @@ const Relay = {
           mergeMessages(o.msgs, false);
           const ids=(o.msgs||[]).filter(m=>m&&m.from!==local.me&&isStr(m.id,40)).map(m=>m.id);
           if(ids.length) this.send({t:'ack', ids});
+          this.requestMissing();
         } else {
           persist(); render(false);
           this.sendSync(o.last);
@@ -524,6 +614,25 @@ const Relay = {
       }
     }
     updateSubtitle();
+  },
+  async requestMissing(){
+    if(!this.enabled) return;
+    const now=Date.now(), ids=[];
+    for(const m of state.messages){
+      if(!m.img || this.have.has(m.img.id) || this.asked[m.img.id]>now-20000) continue;
+      if(await PhotoDB.get(m.img.id)){ this.have.add(m.img.id); continue }
+      ids.push(m.img.id); this.asked[m.img.id]=now;
+    }
+    if(ids.length) this.send({t:'need', ids:ids.slice(-20)});
+  },
+  async sendPhoto(id){
+    if(this.sending.has(id)) return;
+    const blob=await PhotoDB.get(id); if(!blob) return;
+    this.sending.add(id);
+    try{
+      const data=b64(new Uint8Array(await blob.arrayBuffer())), n=Math.ceil(data.length/CHUNK);
+      for(let i=0;i<n;i++){ await this.send({t:'chunk', id, i, of:n, d:data.slice(i*CHUNK,(i+1)*CHUNK)}); await new Promise(r=>setTimeout(r,60)) }
+    } finally { this.sending.delete(id) }
   },
   setTyping(on){
     this.typing=on; clearTimeout(this.typingTimer);
@@ -544,6 +653,12 @@ const Chat = {
     m.reactions=m.reactions||{}; if(r) m.reactions[local.me]=r; else delete m.reactions[local.me];
     persist(); renderMessages(false);
     Relay.send({t:'react', id, who:local.me, r:r||''});
+  },
+  async sendPhoto(file, caption){
+    const {blob,w,h}=await compressPhoto(file);
+    const pid=uid(); await PhotoDB.put(pid,blob); Relay.have.add(pid);
+    const m={from:local.me, text:caption||'', ts:Date.now(), img:{id:pid,w,h}}; if(replyTo) m.replyTo=replyTo;
+    this.addMessage(m);
   },
   deleteMessage(id){ applyDeletes([id]); persist(); render(false); Relay.send({t:'del', id}) },
   saveSettings(s){ Object.assign(state, s, {sv:Date.now()}); persist(); render(false); Relay.send({t:'settings', s:settingsPayload(), sv:state.sv}) },
@@ -607,18 +722,19 @@ function renderMessages(scroll=true){
     const day=fmtDay(m.ts);
     if(day!==lastDay){ html+=`<div class="day-sep">${day}</div>`; lastDay=day }
     const side=m.from===local.me?'me':'them';
-    const big=onlyEmoji(m.text);
+    const big=!m.img && onlyEmoji(m.text);
     const rep=m.replyTo? state.messages.find(x=>x.id===m.replyTo):null;
     const reacts=Object.values(m.reactions||{});
     const tick = !local.room ? ' ✓✓' : (m.got ? ' <span title="Recibido">✓✓</span>' : ' <span title="Llegará cuando tu pareja abra el chat">✓</span>');
     html+=`<div class="row ${side}" data-id="${esc(m.id)}">
-      <div class="bubble ${big?'big':''}">${rep?`<div class="reply-quote">${esc(userOf(rep.from).name)}: ${esc(rep.text.slice(0,50))}</div>`:''}${esc(m.text)}</div>
+      <div class="bubble ${big?'big':''} ${m.img?'has-photo':''}">${rep?`<div class="reply-quote" ${m.img?'style="margin:4px 8px"':''}>${esc(userOf(rep.from).name)}: ${esc((rep.text||'📷 Foto').slice(0,50))}</div>`:''}${m.img?`<div class="photo loading" style="aspect-ratio:${m.img.w}/${m.img.h}"><img data-photo="${esc(m.img.id)}" alt="Foto"></div>${m.text?`<div class="cap">${esc(m.text)}</div>`:''}`:esc(m.text)}</div>
       ${reacts.length?`<div class="reactions">${reacts.map(r=>`<span>${esc(r)}</span>`).join('')}</div>`:''}
       <div class="meta">${side==='them'?esc(userOf(m.from).avatar)+' ':''}${fmtTime(m.ts)}${side==='me'?tick:''}</div>
     </div>`;
   }
   box.innerHTML=html;
   box.scrollTop = scroll ? box.scrollHeight : prevTop;
+  hydratePhotos();
 }
 const render=(scroll=true)=>{ renderHeader(); renderMessages(scroll) };
 
@@ -629,7 +745,7 @@ function notifyNew(m){
   unread++; document.title=`(${unread}) 💌 ${baseTitle}`;
   try{ navigator.vibrate && navigator.vibrate([60,40,60]) }catch(e){}
   if('Notification' in window && Notification.permission==='granted'){
-    try{ new Notification(`${userOf(m.from).avatar} ${userOf(m.from).name}`, {body:m.text.slice(0,140), tag:'nuestro-chat'}) }catch(e){}
+    try{ new Notification(`${userOf(m.from).avatar} ${userOf(m.from).name}`, {body:(m.text||'📷 Foto').slice(0,140), tag:'nuestro-chat'}) }catch(e){}
   }
 }
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ unread=0; document.title=baseTitle } });
@@ -702,7 +818,7 @@ $('#seg').onclick=e=>{
 /* ---------------- Reacciones / acciones ---------------- */
 const pop=$('#reactPop');
 pop.innerHTML=REACTS.map(r=>`<button data-r="${r}">${r}</button>`).join('')+
-  `<button class="act" data-a="reply">↩️</button><button class="act" data-a="copy">📋</button><button class="act" data-a="del">🗑️</button>`;
+  `<button class="act" data-a="view">🔍</button><button class="act" data-a="reply">↩️</button><button class="act" data-a="copy">📋</button><button class="act" data-a="del">🗑️</button>`;
 let lastTap={id:null,t:0};
 $('#messages').addEventListener('click',e=>{
   const bubble=e.target.closest('.bubble'); if(!bubble) return;
@@ -711,6 +827,8 @@ $('#messages').addEventListener('click',e=>{
   if(lastTap.id===id && now-lastTap.t<320){ toggleReact(id,'❤️'); hidePop(); lastTap={id:null,t:0}; return }
   lastTap={id,t:now};
   popTarget=id;
+  const pm=state.messages.find(x=>x.id===id);
+  pop.querySelector('[data-a="view"]').style.display = pm&&pm.img ? '' : 'none';
   const r=bubble.getBoundingClientRect();
   pop.classList.add('on');
   const w=pop.offsetWidth;
@@ -728,11 +846,36 @@ pop.onclick=e=>{
   const b=e.target.closest('button'); if(!b||!popTarget) return;
   const m=state.messages.find(x=>x.id===popTarget); if(!m) return hidePop();
   if(b.dataset.r) toggleReact(popTarget,b.dataset.r);
-  else if(b.dataset.a==='reply'){ replyTo=m.id; $('#replyText').textContent=`↩️ Respondiendo a: ${m.text.slice(0,40)}`; $('#replyBar').classList.add('on'); input.focus() }
+  else if(b.dataset.a==='view'){ openViewer(m) }
+  else if(b.dataset.a==='reply'){ replyTo=m.id; $('#replyText').textContent=`↩️ Respondiendo a: ${(m.text||'📷 Foto').slice(0,40)}`; $('#replyBar').classList.add('on'); input.focus() }
   else if(b.dataset.a==='copy'){ navigator.clipboard?.writeText(m.text) }
   else if(b.dataset.a==='del'){ if(confirm('¿Borrar este mensaje? Se borrará para los dos.')) Chat.deleteMessage(m.id) }
   hidePop();
 };
+async function openViewer(m){
+  const u=m.img && await photoURL(m.img.id);
+  if(!u) return alert('La foto todavía no llega 📷 Se descargará cuando los dos tengan el chat abierto.');
+  $('#viewerImg').src=u; $('#viewerSave').href=u; $('#viewerSave').download='foto-'+new Date(m.ts).toISOString().slice(0,10)+'.jpg';
+  $('#viewer').classList.add('on');
+}
+$('#viewerClose').onclick=()=>$('#viewer').classList.remove('on');
+$('#viewer').onclick=e=>{ if(e.target.id==='viewer') $('#viewer').classList.remove('on') };
+
+/* ---------------- Enviar foto ---------------- */
+$('#photoBtn').onclick=()=>$('#photoInput').click();
+$('#photoInput').onchange=async e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return;
+  if(f.type && !f.type.startsWith('image/')) return alert('Solo se pueden enviar fotos 📷');
+  const caption=input.value.trim().slice(0,2000);
+  $('#photoBtn').textContent='⏳';
+  try{
+    await Chat.sendPhoto(f, caption);
+    input.value=''; input.style.height='auto';
+    replyTo=null; $('#replyBar').classList.remove('on'); stopTyping(); askNotify();
+  }catch(err){ console.error(err); alert('No se pudo enviar esa foto 😢 Prueba con otra.') }
+  finally{ $('#photoBtn').textContent='📷' }
+};
+
 $('#cancelReply').onclick=()=>{ replyTo=null; $('#replyBar').classList.remove('on') };
 
 /* ---------------- Ajustes ---------------- */
@@ -782,7 +925,7 @@ function openConnect(){
 }
 function enterRoom(secret, me){
   if(state.messages.length && !confirm('Los mensajes de prueba de este teléfono se borrarán. ¿Seguir?')) return;
-  state.messages=[]; state.deleted=[]; state.clearedAt=0; state.sv=Date.now(); persist();
+  state.messages=[]; state.deleted=[]; state.clearedAt=0; state.sv=Date.now(); persist(); PhotoDB.clear();
   local.room=secret; local.me=me; local.showInvite=(me==='a'); saveLocal();
   location.reload();
 }
@@ -804,7 +947,7 @@ $('#disconnectBtn').onclick=()=>{
   if(!confirm('¿Salir del chat en este teléfono? Se borrará el historial guardado aquí (tu pareja conserva el suyo). Podrás volver con el link.')) return;
   Relay.send({t:'bye'});
   local.room=''; saveLocal();
-  state.messages=[]; state.deleted=[]; state.clearedAt=0; persist();
+  state.messages=[]; state.deleted=[]; state.clearedAt=0; persist(); PhotoDB.clear();
   setTimeout(()=>location.reload(),300);
 };
 
