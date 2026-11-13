@@ -214,6 +214,24 @@ details.fields summary::-webkit-details-marker{display:none}
 .toast button{border:0;background:none;color:var(--accent-soft);font-weight:700;padding:4px}
 @media (prefers-color-scheme:dark){.toast button{color:var(--accent-ink)}}
 
+.cloud{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:6px 11px;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:7px;color:var(--muted);white-space:nowrap;flex:none}
+.cloud::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.cloud.ok::before{background:var(--in)}
+.cloud.pend::before,.cloud.sync::before{background:var(--warn)}
+.cloud.err::before{background:var(--danger)}
+.cloud.sync::before{animation:blink 1s ease-in-out infinite}
+@keyframes blink{50%{opacity:.25}}
+.steps{margin:4px 0 0;padding-left:22px;display:grid;gap:12px;font-size:14px}
+.steps li::marker{font-weight:700;color:var(--accent)}
+.steps a{color:var(--accent);font-weight:600}
+.cloudrow{display:flex;gap:8px;margin-top:8px}
+.cloudrow input{flex:1;min-width:0;font-family:var(--f-mono);font-size:13px}
+details.how > summary{list-style:none;justify-self:start}
+details.how > summary::-webkit-details-marker{display:none}
+details.how[open] > summary{display:none}
+.codebox{width:100%;min-height:140px;font:12px/1.4 var(--f-mono);border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--surface-2);color:var(--ink);margin-top:8px}
+.mv .by{color:var(--accent);font-weight:600}
+
 @media (max-width:380px){.grid2{grid-template-columns:1fr}.stats .v{font-size:20px}}
 @media (prefers-reduced-motion:reduce){.laser{animation:none}.sheet{animation:none}}
 </style>
@@ -227,6 +245,8 @@ details.fields summary::-webkit-details-marker{display:none}
       <h1>Mi Despensa</h1>
       <div class="sub" id="hdrSub">Inventario de la casa</div>
     </div>
+    <span class="spacer"></span>
+    <button class="cloud" id="cloudPill" type="button" hidden data-goto-cloud></button>
   </div>
 </header>
 
@@ -324,6 +344,8 @@ details.fields summary::-webkit-details-marker{display:none}
   <!-- HISTORIAL -->
   <section id="v-hist" data-view="hist" hidden>
     <div style="display:grid;gap:16px">
+      <div class="panel" id="cloudPanel"></div>
+
       <div class="panel">
         <div class="eyebrow">Tus datos</div>
         <div class="row wrapy">
@@ -379,6 +401,192 @@ details.fields summary::-webkit-details-marker{display:none}
 <div class="toast" id="toast" role="status" hidden></div>
 <div id="fileScan" hidden></div>
 
+<script type="text/plain" id="gsCode">
+/**
+ * Mi Despensa — sincronización con Google Sheets
+ * Pega este código completo en Extensiones → Apps Script de tu planilla
+ * e impleméntalo como "Aplicación web" (Ejecutar como: Yo · Quién tiene acceso: Cualquier persona).
+ * No edites la planilla a mano: los cambios se hacen desde la app.
+ * @OnlyCurrentDoc
+ */
+var CLAVE = '__CLAVE__'; // llave secreta: debe ser la misma que tiene la app
+
+var TABLAS = {
+  Movimientos: {
+    id: 'id',
+    cols: ['fecha', 'producto', 'tipo', 'd', 'by', 'code', 'kind', 'id', 'ts', 'u', 'del', 'rev'],
+    titulos: ['Fecha', 'Producto', 'Tipo', 'Cantidad', 'Usuario', 'Código', 'kind', 'id', 'ts', 'u', 'Borrado', 'rev'],
+    campos: ['id', 'code', 'kind', 'd', 'ts', 'by', 'u', 'del'],
+    numeros: ['d', 'ts', 'u'],
+    texto: ['code', 'id'],
+    ocultas: ['kind', 'id', 'ts', 'u', 'rev']
+  },
+  Productos: {
+    id: 'code',
+    cols: ['code', 'name', 'stock', 'min', 'brand', 'size', 'cat', 'loc', 'img', 'created', 'u', 'del', 'rev'],
+    titulos: ['Código', 'Producto', 'Stock', 'Mínimo', 'Marca', 'Contenido', 'Categoría', 'Ubicación', 'img', 'created', 'u', 'Borrado', 'rev'],
+    campos: ['code', 'name', 'brand', 'size', 'cat', 'loc', 'min', 'img', 'created', 'u', 'del'],
+    numeros: ['min', 'created', 'u'],
+    texto: ['code'],
+    ocultas: ['img', 'created', 'u', 'rev']
+  }
+};
+var TIPOS = { 'in': 'Entrada', 'out': 'Salida', 'set': 'Conteo' };
+
+function doGet() {
+  return ContentService.createTextOutput('Mi Despensa: el script funciona. Copia esta URL y pégala en la app.');
+}
+
+function doPost(e) {
+  var req;
+  try { req = JSON.parse(e.postData.contents); } catch (x) { return salida({ ok: false, error: 'Petición inválida' }); }
+  if (req.key !== CLAVE) return salida({ ok: false, error: 'clave' });
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(25000)) return salida({ ok: false, error: 'La planilla está ocupada, reintenta' });
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var M = abrir(ss, 'Movimientos'), P = abrir(ss, 'Productos');
+    quitarHojaVacia(ss);
+    if (req.action === 'info') {
+      return salida({ ok: true, products: contar(P), moves: contar(M), sheet: ss.getUrl() });
+    }
+    var props = PropertiesService.getScriptProperties();
+    var rev = Math.max(Number(props.getProperty('rev') || 0), P.maxRev, M.maxRev);
+    rev = fusionar(P, req.p || [], rev, function (viejo, nuevo) {
+      return Number(nuevo.u || 0) >= Number(viejo.u || 0);
+    });
+    rev = fusionar(M, req.m || [], rev, function (viejo, nuevo) {
+      return !viejo.del && !!nuevo.del; // un movimiento solo cambia para borrarse
+    }, function (o, nuevo) {
+      o.fecha = o.ts ? new Date(Number(o.ts)) : '';
+      o.tipo = TIPOS[o.kind] || o.kind;
+      if (nuevo.n) o.producto = nuevo.n;
+    });
+    calcularStock(P, M);
+    guardar(M);
+    guardar(P);
+    props.setProperty('rev', String(rev));
+    var desde = Number(req.since || 0);
+    return salida({ ok: true, rev: rev, sheet: ss.getUrl(), p: leer(P, desde), m: leer(M, desde) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function abrir(ss, nombre) {
+  var t = TABLAS[nombre], n = t.cols.length, sh = ss.getSheetByName(nombre);
+  if (!sh) {
+    sh = ss.insertSheet(nombre);
+    sh.getRange(1, 1, 1, n).setValues([t.titulos]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    t.ocultas.forEach(function (c) { sh.hideColumns(t.cols.indexOf(c) + 1); });
+  }
+  var filas = sh.getLastRow() - 1;
+  var vals = filas > 0 ? sh.getRange(2, 1, filas, n).getValues() : [];
+  var ic = t.cols.indexOf(t.id), ir = t.cols.indexOf('rev'), idx = {}, maxRev = 0;
+  for (var i = 0; i < vals.length; i++) {
+    var id = String(vals[i][ic]);
+    if (id) idx[id] = i;
+    maxRev = Math.max(maxRev, Number(vals[i][ir]) || 0);
+  }
+  return { sh: sh, t: t, vals: vals, idx: idx, maxRev: maxRev, cambio: false };
+}
+
+function quitarHojaVacia(ss) {
+  ss.getSheets().forEach(function (h) {
+    var nm = h.getName();
+    if (!TABLAS[nm] && /^(Hoja ?1|Sheet ?1)$/.test(nm) && h.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(h);
+  });
+}
+
+function aObj(t, fila) {
+  var o = {};
+  t.cols.forEach(function (c, i) { o[c] = fila[i]; });
+  return o;
+}
+
+function aFila(t, o) {
+  return t.cols.map(function (c) {
+    var v = o[c];
+    if (v === undefined || v === null) return '';
+    if (typeof v === 'string' && /^[=+\-@]/.test(v)) return "'" + v; // evita que un nombre se lea como fórmula
+    return v;
+  });
+}
+
+function fusionar(T, regs, rev, gana, extra) {
+  var t = T.t;
+  regs.forEach(function (r) {
+    var id = String(r[t.id] === undefined || r[t.id] === null ? '' : r[t.id]);
+    if (!id) return;
+    var i = T.idx[id], o;
+    if (i === undefined) {
+      if (r.del) return;
+      o = {};
+    } else {
+      o = aObj(t, T.vals[i]);
+      if (!gana(o, r)) return;
+    }
+    t.campos.forEach(function (c) { if (r[c] !== undefined && c !== 'del') o[c] = r[c]; });
+    o.del = r.del ? 1 : '';
+    if (extra) extra(o, r);
+    o.rev = ++rev;
+    var fila = aFila(t, o);
+    if (i === undefined) { T.idx[id] = T.vals.length; T.vals.push(fila); } else { T.vals[i] = fila; }
+    T.cambio = true;
+  });
+  return rev;
+}
+
+function calcularStock(P, M) {
+  var tm = M.t, cc = tm.cols.indexOf('code'), cd = tm.cols.indexOf('d'), cx = tm.cols.indexOf('del');
+  var s = {};
+  M.vals.forEach(function (f) {
+    if (f[cx] || f[cc] === '') return;
+    s[f[cc]] = (s[f[cc]] || 0) + (Number(f[cd]) || 0);
+  });
+  var tp = P.t, pc = tp.cols.indexOf('code'), ps = tp.cols.indexOf('stock'), px = tp.cols.indexOf('del');
+  P.vals.forEach(function (f) {
+    var v = f[px] ? '' : Math.round((s[f[pc]] || 0) * 100) / 100;
+    if (f[ps] !== v) { f[ps] = v; P.cambio = true; }
+  });
+}
+
+function guardar(T) {
+  if (!T.cambio || !T.vals.length) return;
+  var t = T.t, sh = T.sh, filas = T.vals.length;
+  t.texto.forEach(function (c) { sh.getRange(2, t.cols.indexOf(c) + 1, filas, 1).setNumberFormat('@'); });
+  var cf = t.cols.indexOf('fecha');
+  if (cf >= 0) sh.getRange(2, cf + 1, filas, 1).setNumberFormat('dd/MM/yyyy HH:mm');
+  sh.getRange(2, 1, filas, t.cols.length).setValues(T.vals);
+}
+
+function leer(T, desde) {
+  var t = T.t, ic = t.cols.indexOf(t.id), ir = t.cols.indexOf('rev'), res = [];
+  T.vals.forEach(function (f) {
+    if (!String(f[ic]) || !((Number(f[ir]) || 0) > desde)) return;
+    var o = aObj(t, f), r = {};
+    t.campos.forEach(function (c) {
+      var v = o[c];
+      if (c === 'del') r.del = !!v;
+      else if (t.numeros.indexOf(c) >= 0) r[c] = Number(v) || 0;
+      else r[c] = v === null || v === undefined ? '' : String(v);
+    });
+    res.push(r);
+  });
+  return res;
+}
+
+function contar(T) {
+  var t = T.t, ic = t.cols.indexOf(t.id), ix = t.cols.indexOf('del'), n = 0;
+  T.vals.forEach(function (f) { if (String(f[ic]) && !f[ix]) n++; });
+  return n;
+}
+
+function salida(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+</script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 "use strict";
@@ -387,7 +595,7 @@ const KEY='despensa.v1', UIKEY='despensa.ui';
 const CATS=['Despensa','Bebidas','Lácteos','Frescos','Congelados','Aseo personal','Limpieza','Mascotas','Otros'];
 const LOCS=['Despensa','Cocina','Refrigerador','Congelador','Baño','Lavadero','Bodega'];
 const KIND={in:{lbl:'Entrada',sign:'+'},out:{lbl:'Salida',sign:'−'},set:{lbl:'Conteo',sign:'='}};
-let S={products:{},moves:[]};
+let S={products:{},moves:[],dirty:{p:{},m:{}}};
 let UI={tab:'scan',mode:'in',quick:false,loc:'Todo',sort:'name'};
 
 const $=s=>document.querySelector(s);
@@ -401,6 +609,7 @@ function load(){
   try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(d&&typeof d==='object')S=d;}}catch(e){}
   try{const u=localStorage.getItem(UIKEY);if(u)Object.assign(UI,JSON.parse(u));}catch(e){}
   S.products=S.products||{};S.moves=Array.isArray(S.moves)?S.moves:[];
+  if(!S.dirty||typeof S.dirty!=='object')S.dirty={p:{},m:{}};S.dirty.p=S.dirty.p||{};S.dirty.m=S.dirty.m||{};
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){toast('No se pudo guardar en este navegador (¿modo incógnito?)');}}
 function saveUI(){try{localStorage.setItem(UIKEY,JSON.stringify(UI));}catch(e){}}
@@ -420,10 +629,12 @@ function addMove(code,kind,q){
   } else d=q-s;
   if(d===0)return {before:s,after:s,mv:null};
   const mv={id:uid(),code,kind,d:Math.round(d*100)/100,ts:Date.now()};
-  S.moves.push(mv);save();renderAll();
+  if(UI.who)mv.by=UI.who;
+  if(S.products[code]?.ex)mv.ex=true;
+  S.moves.push(mv);touchM(mv.id);save();renderAll();
   return {before:s,after:s+d,mv};
 }
-function removeMove(id){S.moves=S.moves.filter(m=>m.id!==id);save();renderAll();}
+function removeMove(id){S.moves=S.moves.filter(m=>m.id!==id);touchM(id);save();renderAll();}
 
 /* ---------- Búsqueda en Open Food Facts y afines ---------- */
 const SOURCES=[
@@ -476,6 +687,7 @@ function renderHeader(){
   const need=codes.filter(c=>status(S.products[c],st[c])!=='ok').length;
   $('#hdrSub').textContent=codes.length?`${codes.length} producto${codes.length===1?'':'s'} · ${need} por reponer`:'Inventario de la casa';
   const b=$('#buyBadge');b.hidden=!need;b.textContent=need;
+  updCloudStatus();
 }
 
 function mvRow(m,withDel){
@@ -483,7 +695,7 @@ function mvRow(m,withDel){
   const q=m.kind==='set'?'= '+fmt(stockAt(m)):(m.d>0?'+':'−')+fmt(Math.abs(m.d));
   const t=new Date(m.ts).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
   return `<li class="mv"><span class="q ${m.kind}">${q}</span>
-    <button class="item-main" data-open="${esc(m.code)}"><span class="it"><b>${esc(p.name)}</b><small>${KIND[m.kind].lbl}${m.kind==='set'?' ('+(m.d>0?'+':'−')+fmt(Math.abs(m.d))+')':''} · <time>${t}</time></small></span></button>
+    <button class="item-main" data-open="${esc(m.code)}"><span class="it"><b>${esc(p.name)}</b><small>${KIND[m.kind].lbl}${m.kind==='set'?' ('+(m.d>0?'+':'−')+fmt(Math.abs(m.d))+')':''} · <time>${t}</time>${m.by?' · <span class="by">'+esc(m.by)+'</span>':''}</small></span></button>
     ${withDel?`<button class="del" data-del="${m.id}">Deshacer</button>`:`<span></span>`}</li>`;
 }
 function stockAt(m){let s=0;for(const x of S.moves){if(x.code===m.code)s+=x.d;if(x.id===m.id)break;}return s;}
@@ -635,8 +847,9 @@ function commitSheet(){
   if(!name){const d=$('details.fields');d.open=true;$('#fName').focus();toast('Ponle un nombre al producto');return;}
   const prev=S.products[sh.code]||{created:Date.now()};
   S.products[sh.code]={...prev,code:sh.code,name,brand:$('#fBrand').value.trim(),size:$('#fSize').value.trim(),
-    cat:$('#fCat').value,loc:$('#fLoc').value,min:Math.max(0,Math.round(num($('#fMin').value))),img:prev.img||sh.img||''};
-  delete S.products[sh.code].ex;
+    cat:$('#fCat').value,loc:$('#fLoc').value,min:Math.max(0,Math.round(num($('#fMin').value))),img:prev.img||sh.img||'',u:Date.now()};
+  if(S.products[sh.code].ex){delete S.products[sh.code].ex;for(const m of S.moves)if(m.code===sh.code&&m.ex){delete m.ex;touchM(m.id);}}
+  touchP(sh.code);
   save();
   const q=num($('#shQ').value);
   if(q<0){toast('La cantidad no puede ser negativa');return;}
@@ -738,16 +951,16 @@ function expInv(){const st=stocks();const rows=[['Código','Producto','Marca','C
   for(const p of Object.values(S.products).sort((a,b)=>a.name.localeCompare(b.name,'es'))){const s=st[p.code];const k=status(p,s);
     rows.push([p.code,p.name,p.brand,p.size,p.cat,p.loc,fmt(s),p.min,k==='out'?'Agotado':k==='low'?'Por agotarse':'OK']);}
   download(`inventario_${stamp()}.csv`,csv(rows),'text/csv;charset=utf-8');}
-function expMov(){const rows=[['Fecha','Hora','Código','Producto','Tipo','Cantidad','Stock después']];const run={};
+function expMov(){const rows=[['Fecha','Hora','Código','Producto','Tipo','Cantidad','Stock después','Usuario']];const run={};
   for(const m of S.moves){run[m.code]=(run[m.code]||0)+m.d;const d=new Date(m.ts);
-    rows.push([d.toLocaleDateString('es-CL'),d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'}),m.code,pname(m.code),KIND[m.kind].lbl,fmt(m.d),fmt(run[m.code])]);}
+    rows.push([d.toLocaleDateString('es-CL'),d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'}),m.code,pname(m.code),KIND[m.kind].lbl,fmt(m.d),fmt(run[m.code]),m.by||'']);}
   download(`movimientos_${stamp()}.csv`,csv(rows),'text/csv;charset=utf-8');}
-function expJson(){download(`despensa_respaldo_${stamp()}.json`,JSON.stringify({app:'mi-despensa',v:1,exported:new Date().toISOString(),...S}),'application/json');}
+function expJson(){download(`despensa_respaldo_${stamp()}.json`,JSON.stringify({app:'mi-despensa',v:1,exported:new Date().toISOString(),products:S.products,moves:S.moves}),'application/json');}
 async function impJson(file){
   if(!file)return;
   try{const d=JSON.parse(await file.text());
     if(!d||typeof d.products!=='object'||!Array.isArray(d.moves))throw 0;
-    confirmSheet(`Restaurar respaldo`,`Se reemplazará el inventario actual por el del respaldo: ${Object.keys(d.products).length} productos y ${d.moves.length} movimientos.`,'Restaurar',()=>{S={products:d.products,moves:d.moves};save();renderAll();toast('Respaldo restaurado');});
+    confirmSheet(`Restaurar respaldo`,`Se reemplazará el inventario actual${C?' (en todos los celulares conectados)':''} por el del respaldo: ${Object.keys(d.products).length} productos y ${d.moves.length} movimientos.`,'Restaurar',()=>{replaceAll(d.products,d.moves);toast('Respaldo restaurado');});
   }catch(e){toast('El archivo no es un respaldo válido de Mi Despensa');}
 }
 function confirmSheet(title,body,okLbl,onOk){
@@ -757,6 +970,222 @@ function confirmSheet(title,body,okLbl,onOk){
   $('#scrim').hidden=false;$('#sheet').hidden=false;
   $('#cfOk').onclick=()=>{closeSheet();onOk();};
 }
+
+/* ---------- Nube (Google Sheets vía Apps Script) ---------- */
+const CKEY='despensa.cloud', SETUPKEY='despensa.setupKey';
+let C=null,syncing=false,syncAgain=false,syncT=null;
+function loadCloud(){try{C=JSON.parse(localStorage.getItem(CKEY)||'null');if(C&&!C.url)C=null;}catch(e){C=null}}
+function saveCloud(){try{C?localStorage.setItem(CKEY,JSON.stringify(C)):localStorage.removeItem(CKEY);}catch(e){}}
+function randKey(){const a=new Uint8Array(18);crypto.getRandomValues(a);return [...a].map(b=>'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b%56]).join('');}
+function setupKey(){let k='';try{k=localStorage.getItem(SETUPKEY)||'';}catch(e){}if(!k){k=randKey();try{localStorage.setItem(SETUPKEY,k);}catch(e){}}return k;}
+function scriptCode(key){return $('#gsCode').textContent.replace('__CLAVE__',key).trim()+'\n';}
+function pendingCount(){return Object.keys(S.dirty.p).length+Object.keys(S.dirty.m).length;}
+function localCount(){return {p:Object.values(S.products).filter(p=>!p.ex).length,m:S.moves.filter(m=>!m.ex).length};}
+
+/* Marcar cambios para subir */
+function touchP(code){
+  if(!C)return;const p=S.products[code];if(p&&p.ex)return;
+  S.dirty.p[code]=p?(p.u||Date.now()):Date.now();schedSync();
+}
+function touchM(id){
+  if(!C)return;const m=S.moves.find(x=>x.id===id);if(m&&m.ex)return;
+  S.dirty.m[id]=m?m.ts:Date.now();schedSync();
+}
+function markAllDirty(){
+  for(const p of Object.values(S.products))if(!p.ex)S.dirty.p[p.code]=p.u||p.created||Date.now();
+  for(const m of S.moves)if(!m.ex)S.dirty.m[m.id]=m.ts;
+}
+function replaceAll(products,moves){
+  const oldP=Object.keys(S.products),oldM=S.moves.map(m=>m.id);
+  S.products=products;S.moves=moves.slice().sort((a,b)=>a.ts-b.ts);
+  if(C){
+    const now=Date.now();
+    for(const c of oldP)if(!S.products[c])S.dirty.p[c]=now;
+    const keep=new Set(S.moves.map(m=>m.id));for(const id of oldM)if(!keep.has(id))S.dirty.m[id]=now;
+    for(const p of Object.values(S.products)){if(!p.ex){p.u=now;S.dirty.p[p.code]=now;}}
+    for(const m of S.moves)if(!m.ex)S.dirty.m[m.id]=m.ts;
+    schedSync();
+  }
+  save();renderAll();
+}
+function schedSync(ms=1500){if(!C)return;clearTimeout(syncT);syncT=setTimeout(sync,ms);updCloudStatus();}
+
+async function api(body,cfg=C){
+  const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),30000);
+  try{
+    const r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...body,key:cfg.key}),signal:ctl.signal,redirect:'follow'});
+    const txt=await r.text();let j;
+    try{j=JSON.parse(txt);}catch(e){throw new Error('La URL no respondió como el script de Mi Despensa. Revisa que sea la de la aplicación web y que el acceso sea “Cualquier persona”.');}
+    if(!j.ok)throw new Error(j.error==='clave'?'La clave no coincide: el código pegado en Apps Script es de otra conexión. Cópialo de nuevo y crea una implementación nueva.':(j.error||'Error en la planilla'));
+    return j;
+  }catch(e){
+    if(e.name==='AbortError')throw new Error('La planilla tardó demasiado en responder');
+    if(e instanceof TypeError)throw new Error(navigator.onLine===false?'Sin internet':'No se pudo conectar con la planilla. Revisa la URL y que el acceso sea “Cualquier persona”.');
+    throw e;
+  }finally{clearTimeout(t);}
+}
+
+const pRec=(p,u)=>({code:p.code,name:p.name,brand:p.brand||'',size:p.size||'',cat:p.cat||'Otros',loc:p.loc||'Despensa',min:p.min||0,img:p.img||'',created:p.created||0,u});
+const mRec=m=>({id:m.id,code:m.code,kind:m.kind,d:m.d,ts:m.ts,by:m.by||'',u:m.ts,n:pname(m.code)});
+
+async function sync(){
+  if(!C)return;
+  if(syncing){syncAgain=true;return;}
+  clearTimeout(syncT);syncing=true;updCloudStatus();
+  const cfg=C;
+  const sentP={...S.dirty.p},sentM={...S.dirty.m};
+  const byId=new Map(S.moves.map(m=>[m.id,m]));
+  const p=Object.keys(sentP).map(c=>S.products[c]&&!S.products[c].ex?pRec(S.products[c],sentP[c]):{code:c,del:1,u:sentP[c]});
+  const m=Object.keys(sentM).map(id=>{const x=byId.get(id);return x&&!x.ex?mRec(x):{id,del:1,u:sentM[id]};});
+  try{
+    const res=await api({action:'sync',since:C.since||0,p,m},cfg);
+    if(C!==cfg)return;
+    for(const k in sentP)if(S.dirty.p[k]===sentP[k])delete S.dirty.p[k];
+    for(const k in sentM)if(S.dirty.m[k]===sentM[k])delete S.dirty.m[k];
+    if((res.rev||0)<(C.since||0)){C.since=0;syncAgain=true;}  // la planilla se reinició: bajar todo de nuevo
+    else{applyRemote(res);C.since=res.rev||0;}
+    C.sheet=res.sheet||C.sheet;C.last=Date.now();C.err='';
+    saveCloud();save();renderAll();
+  }catch(e){
+    if(C===cfg){C.err=e.message;saveCloud();}
+  }finally{
+    syncing=false;updCloudStatus();
+    if(syncAgain||(C&&!C.err&&pendingCount())){syncAgain=false;schedSync(400);}
+  }
+}
+function applyRemote(res){
+  for(const r of res.p||[]){
+    if(S.dirty.p[r.code])continue;
+    if(r.del){delete S.products[r.code];continue;}
+    const prev=S.products[r.code];
+    if(prev&&prev.ex)continue;
+    S.products[r.code]={code:r.code,name:r.name,brand:r.brand,size:r.size,cat:r.cat,loc:r.loc,min:r.min,img:r.img,created:r.created,u:r.u};
+  }
+  const ids=new Set(S.moves.map(m=>m.id));let add=false,del=new Set();
+  for(const r of res.m||[]){
+    if(S.dirty.m[r.id])continue;
+    if(r.del){if(ids.has(r.id))del.add(r.id);continue;}
+    if(!ids.has(r.id)){const mv={id:r.id,code:r.code,kind:r.kind,d:r.d,ts:r.ts};if(r.by)mv.by=r.by;S.moves.push(mv);ids.add(r.id);add=true;}
+  }
+  if(del.size)S.moves=S.moves.filter(m=>!del.has(m.id));
+  if(add)S.moves.sort((a,b)=>a.ts-b.ts);
+}
+
+function connectLink(){return location.origin+location.pathname+'#conectar='+encodeURIComponent(btoa(JSON.stringify({u:C.url,k:C.key})));}
+function checkHash(){
+  const mt=location.hash.match(/conectar=([^&]+)/);if(!mt)return;
+  try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}
+  let o;try{o=JSON.parse(atob(decodeURIComponent(mt[1])));}catch(e){return toast('El link de conexión no es válido');}
+  if(!o||!o.u||!o.k)return toast('El link de conexión no es válido');
+  if(C&&C.url===o.u&&C.key===o.k)return toast('Este celular ya está conectado a la planilla');
+  setTab('hist');connect(o.u,o.k);
+}
+async function connect(url,key){
+  url=String(url||'').trim();
+  if(/\/dev(\?.*)?$/.test(url))return toast('Usa la URL que termina en /exec (no la de /dev)');
+  if(!/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec(\?.*)?$/.test(url)&&!/^http:\/\/localhost(:\d+)?\//.test(url))return toast('Pega la “URL de la aplicación web”: empieza con https://script.google.com y termina en /exec');
+  const cfg={url,key,since:0};
+  const btn=$('#cloudGo');if(btn){btn.disabled=true;btn.textContent='Conectando…';}
+  toast('Conectando con la planilla…');
+  let info;
+  try{info=await api({action:'info'},cfg);}
+  catch(e){toast(e.message);if(btn){btn.disabled=false;btn.textContent='Conectar';}return;}
+  const go=mode=>{
+    if(mode==='sheet'){
+      for(const c in S.products)if(!S.products[c].ex)delete S.products[c];
+      S.moves=S.moves.filter(m=>m.ex);
+    }
+    C={...cfg,sheet:info.sheet||'',err:''};S.dirty={p:{},m:{}};
+    if(mode==='merge')markAllDirty();
+    save();saveCloud();try{localStorage.removeItem(SETUPKEY);}catch(e){}
+    renderCloud();renderAll();sync();toast('Conectado a Google Sheets');
+  };
+  const lc=localCount(),local=lc.p+lc.m,remote=(info.products||0)+(info.moves||0);
+  if(!local)return go('sheet');
+  if(!remote)return go('merge');
+  busy=true;
+  $('#sheetBody').innerHTML=`<h2>La planilla ya tiene datos</h2>
+    <p class="muted" style="margin:0">En la planilla hay <b>${info.products} productos</b> y <b>${info.moves} movimientos</b>. En este celular hay <b>${lc.p} productos</b> y <b>${lc.m} movimientos</b>. ¿Qué hacemos?</p>
+    <div style="display:grid;gap:8px">
+      <button class="btn primary" type="button" id="cfSheet">Usar lo de la planilla <small style="font-weight:500">(recomendado)</small></button>
+      <button class="btn" type="button" id="cfMerge">Juntar ambos (suma lo de este celular)</button>
+      <button class="btn ghost" type="button" data-close>Cancelar</button>
+    </div>`;
+  $('#scrim').hidden=false;$('#sheet').hidden=false;
+  $('#cfSheet').onclick=()=>{closeSheet();go('sheet');};
+  $('#cfMerge').onclick=()=>{closeSheet();go('merge');};
+  if(btn){btn.disabled=false;btn.textContent='Conectar';}
+}
+function ago(ts){const s=Math.round((Date.now()-ts)/1000);if(s<45)return 'recién';if(s<3600)return 'hace '+Math.round(s/60)+' min';if(s<86400)return 'hace '+Math.round(s/3600)+' h';return new Date(ts).toLocaleDateString('es-CL');}
+function updCloudStatus(){
+  const pill=$('#cloudPill');if(!pill)return;
+  if(!C){pill.hidden=true;return;}
+  const n=pendingCount();let cls,txt;
+  if(syncing){cls='sync';txt='Sincronizando…';}
+  else if(C.err){cls='err';txt=n?`${n} sin subir`:'Sin conexión';}
+  else if(n){cls='pend';txt=`${n} por subir`;}
+  else{cls='ok';txt='En la nube';}
+  pill.hidden=false;pill.className='cloud '+cls;pill.textContent=txt;
+  const st=$('#cloudState');if(st){st.className='cloud '+cls;st.textContent=txt;}
+  const inf=$('#cloudInfo');
+  if(inf)inf.textContent=C.err?C.err+(n?` · ${n} cambio${n>1?'s':''} esperando para subir (no se pierden).`:''):C.last?'Última sincronización: '+ago(C.last)+'. Se actualiza sola cada 20 segundos.':'';
+}
+function renderCloud(){
+  const el=$('#cloudPanel');
+  if(C){
+    el.innerHTML=`<div class="eyebrow">Nube · Google Sheets</div>
+      <div class="row"><span class="cloud" id="cloudState"></span><span class="spacer"></span>${C.sheet?`<a class="link" href="${esc(C.sheet)}" target="_blank" rel="noopener">Abrir planilla</a>`:''}</div>
+      <span class="muted" id="cloudInfo" style="font-size:13px"></span>
+      <label class="fld"><span>Tu nombre (queda en cada movimiento que hagas)</span><input type="text" id="whoIn" maxlength="30" value="${esc(UI.who||'')}" placeholder="Ej. Carla, Caja 1, Bodega"></label>
+      <div class="row wrapy">
+        <button class="btn sm primary" type="button" id="cloudShare">Enviar link a otro celular</button>
+        <button class="btn sm" type="button" id="cloudNow">Sincronizar ahora</button>
+        <button class="btn sm ghost" type="button" id="cloudOff">Desconectar</button>
+      </div>
+      <span class="muted" style="font-size:12.5px">El link de conexión funciona como llave: compártelo solo con tu equipo. Los cambios hazlos en la app, no a mano en la planilla.</span>`;
+  }else{
+    el.innerHTML=`<div class="eyebrow">Nube · Google Sheets</div>
+      <div style="display:grid;gap:4px"><b>Usa el mismo inventario en varios celulares</b>
+      <span class="muted" style="font-size:13.5px">Los datos se guardan en una planilla de Google en tu Drive. Cada movimiento se sube solo y aparece en los demás celulares en segundos. Sin internet la app sigue funcionando y sube todo cuando vuelve la señal.</span></div>
+      <details class="how" id="cloudHow">
+        <summary class="btn sm primary">Conectar con Google Sheets</summary>
+        <ol class="steps">
+          <li><b>Hazlo desde un computador</b> (una sola vez). Abre esta misma app en el computador y crea una planilla nueva en <a href="https://sheets.new" target="_blank" rel="noopener">sheets.new</a>. Ponle de nombre “Mi Despensa”.</li>
+          <li>En la planilla, menú <b>Extensiones → Apps Script</b>. Borra lo que aparece, pega el código y guarda (ícono de disquete).
+            <div class="row wrapy" style="margin-top:8px"><button class="btn sm" type="button" id="copyGs">Copiar código</button></div>
+            <textarea class="codebox" id="gsBox" readonly hidden></textarea></li>
+          <li>Arriba a la derecha: <b>Implementar → Nueva implementación</b>. En el engranaje elige <b>Aplicación web</b>. “Ejecutar como”: <b>Yo</b>. “Quién tiene acceso”: <b>Cualquier persona</b>. Toca <b>Implementar</b>.</li>
+          <li>Google te pide autorizar: elige tu cuenta → <b>Configuración avanzada</b> → <b>Ir a … (no seguro)</b> → <b>Permitir</b>. Aparece ese aviso porque el script es tuyo y no está publicado; solo puede usar esta planilla.</li>
+          <li>Copia la <b>URL de la aplicación web</b> (termina en <code class="code">/exec</code>) y pégala aquí:
+            <form class="cloudrow" id="cloudForm" autocomplete="off"><input type="url" id="cloudUrl" placeholder="https://script.google.com/macros/s/…/exec" required aria-label="URL de la aplicación web"><button class="btn sm primary" id="cloudGo">Conectar</button></form></li>
+          <li>Listo. Toca <b>“Enviar link a otro celular”</b> y ábrelo en cada teléfono del negocio: se conectan solos.</li>
+        </ol>
+      </details>
+      <span class="muted" style="font-size:13px">¿Te enviaron un link de conexión? Ábrelo en este celular y se conecta solo.</span>`;
+  }
+  updCloudStatus();
+}
+$('#cloudPanel').addEventListener('click',async e=>{
+  const id=e.target.closest('button')?.id;if(!id)return;
+  if(id==='copyGs'){
+    const code=scriptCode(setupKey());
+    try{await navigator.clipboard.writeText(code);toast('Código copiado. Pégalo en Apps Script.');}
+    catch(_){const b=$('#gsBox');b.hidden=false;b.value=code;b.focus();b.select();toast('Selecciona todo el texto y cópialo');}
+  }
+  if(id==='cloudNow'){C.err='';sync();}
+  if(id==='cloudShare'){
+    const url=connectLink();
+    try{if(navigator.share){await navigator.share({title:'Mi Despensa',text:'Conecta tu celular al inventario de Mi Despensa:',url});return;}}catch(_){return;}
+    try{await navigator.clipboard.writeText(url);toast('Link copiado. Envíalo por WhatsApp a tu equipo.');}
+    catch(_){const b=document.createElement('textarea');b.className='codebox';b.value=url;b.readOnly=true;e.target.closest('.row').after(b);b.select();toast('Copia el link de conexión');}
+  }
+  if(id==='cloudOff'){
+    const n=pendingCount();
+    confirmSheet('Desconectar de la nube',`Este celular deja de sincronizar. Los datos quedan en el celular y en la planilla.${n?` Ojo: hay ${n} cambio${n>1?'s':''} que todavía no se subieron y no llegarán a la planilla.`:''}`,'Desconectar',()=>{C=null;saveCloud();S.dirty={p:{},m:{}};save();renderCloud();toast('Desconectado de la nube');});
+  }
+});
+$('#cloudPanel').addEventListener('submit',e=>{if(e.target.id==='cloudForm'){e.preventDefault();connect($('#cloudUrl').value,setupKey());}});
+$('#cloudPanel').addEventListener('change',e=>{if(e.target.id==='whoIn'){UI.who=e.target.value.trim().slice(0,30);saveUI();toast(UI.who?'Nombre guardado':'Nombre borrado');}});
 
 /* ---------- Ejemplos ---------- */
 function loadExamples(){
@@ -786,6 +1215,7 @@ document.addEventListener('click',e=>{
   const d=t.dataset;
   if(d.tab)return setTab(d.tab);
   if(d.goto)return setTab(d.goto);
+  if('gotoCloud' in d){setTab('hist');return $('#cloudPanel').scrollIntoView({block:'start'});}
   if(d.k&&t.closest('#modeSeg'))return setMode(d.k);
   if(d.k&&t.closest('#shSeg'))return setSheetKind(d.k);
   if(d.step){const i=$('#shQ');i.value=fmt(Math.max(0,num(i.value)+Number(d.step))).replace(',','.');return updCalc();}
@@ -807,7 +1237,8 @@ $('#sheetBody').addEventListener('click',e=>{
   if(e.target.id==='shSave')return commitSheet();
   if(e.target.id==='shDel'){const b=e.target;
     if(!b.dataset.arm){b.dataset.arm=1;b.textContent='Toca de nuevo para eliminar';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='Eliminar producto e historial';}},3000);return;}
-    const c=sh.code,n=pname(c);delete S.products[c];S.moves=S.moves.filter(m=>m.code!==c);save();closeSheet();renderAll();toast(n+' eliminado');}
+    const c=sh.code,n=pname(c);const gone=S.moves.filter(m=>m.code===c).map(m=>m.id);
+    delete S.products[c];S.moves=S.moves.filter(m=>m.code!==c);touchP(c);gone.forEach(touchM);save();closeSheet();renderAll();toast(n+' eliminado');}
 });
 $('#sheetBody').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();commitSheet();}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#sheet').hidden)closeSheet();});
@@ -827,16 +1258,22 @@ $('#copyBuy').onclick=async()=>{
 $('#moreHist').onclick=()=>{histLimit+=100;renderHist();};
 $('#expInv').onclick=expInv;$('#expMov').onclick=expMov;$('#expJson').onclick=expJson;
 $('#impJson').onchange=e=>{impJson(e.target.files[0]);e.target.value='';};
-$('#wipe').onclick=()=>confirmSheet('Borrar todo','Se eliminan todos los productos y movimientos de este celular. Descarga un respaldo antes si quieres conservarlos.','Borrar todo',()=>{S={products:{},moves:[]};save();renderAll();toast('Inventario borrado');});
-document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCam();});
+$('#wipe').onclick=()=>confirmSheet('Borrar todo',C?'Se eliminan todos los productos y movimientos en este celular, en la planilla y en todos los celulares conectados. Descarga un respaldo antes si quieres conservarlos.':'Se eliminan todos los productos y movimientos de este celular. Descarga un respaldo antes si quieres conservarlos.','Borrar todo',()=>{replaceAll({},[]);toast('Inventario borrado');});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCam();else if(C)schedSync(200);});
+window.addEventListener('online',()=>{if(C)schedSync(200);});
+setInterval(()=>{if(C&&!document.hidden&&navigator.onLine!==false)sync();},20000);
 
 /* ---------- Inicio ---------- */
 load();
+loadCloud();
+renderCloud();
 $('#quickSw').checked=!!UI.quick;
 setMode(UI.mode);
 if(!window.isSecureContext)$('#httpsNote').hidden=false;
 renderAll();
 setTab(['scan','inv','buy','hist'].includes(UI.tab)?UI.tab:'scan');
+checkHash();
+if(C)sync();
 </script>
 </body>
 </html>
