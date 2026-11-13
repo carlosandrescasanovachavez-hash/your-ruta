@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#ff7aa2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Nuestro Chat 💕</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💕</text></svg>">
+<style>
+  :root{
+    --bg1:#ffe3ec; --bg2:#f3e8ff;
+    --primary:#ff7aa2; --primary-dark:#e85d8a;
+    --me:#ff7aa2; --me-text:#fff;
+    --them:#ffffff; --them-text:#3b2a35;
+    --ink:#3b2a35; --muted:#9a8590;
+    --card:#ffffffcc; --shadow:0 6px 20px rgba(232,93,138,.18);
+    --radius:20px;
+  }
+  body.theme-lila{--primary:#a77bff;--primary-dark:#8b5cf6;--me:#a77bff;--bg1:#efe7ff;--bg2:#e0f2fe}
+  body.theme-menta{--primary:#34c39a;--primary-dark:#159a75;--me:#34c39a;--bg1:#dcfce7;--bg2:#e0f7fa}
+  body.theme-noche{--primary:#ff7aa2;--primary-dark:#ff9cbb;--me:#ff7aa2;--bg1:#1e1b2e;--bg2:#2a1f3d;--them:#33294a;--them-text:#f4e9f0;--ink:#f4e9f0;--muted:#b9a8c4;--card:#2a2340cc}
+
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    font-family:"Nunito","Segoe UI",system-ui,-apple-system,sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2));
+    color:var(--ink); overflow:hidden;
+  }
+  .app{height:100dvh;max-width:560px;margin:0 auto;display:flex;flex-direction:column;position:relative}
+
+  /* ---------- Header ---------- */
+  header{
+    display:flex;align-items:center;gap:12px;padding:12px 14px;
+    padding-top:calc(12px + env(safe-area-inset-top));
+    background:var(--card);backdrop-filter:blur(12px);
+    box-shadow:var(--shadow);border-radius:0 0 var(--radius) var(--radius);z-index:5
+  }
+  .avatars{position:relative;width:52px;height:40px;flex-shrink:0}
+  .av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-size:22px;
+      background:#fff;border:2px solid var(--primary);position:absolute;top:1px}
+  .av.a{left:0}.av.b{left:16px;z-index:1}
+  .h-info{flex:1;min-width:0}
+  .h-title{font-weight:800;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .h-sub{font-size:12px;color:var(--muted)}
+  .icon-btn{border:none;background:transparent;font-size:22px;cursor:pointer;padding:6px;border-radius:12px;color:var(--ink)}
+  .icon-btn:active{transform:scale(.9)}
+
+  /* ---------- Counter ---------- */
+  .love-bar{
+    margin:10px 14px 0;padding:8px 14px;border-radius:14px;background:var(--card);
+    font-size:13px;display:flex;justify-content:space-between;align-items:center;box-shadow:var(--shadow)
+  }
+  .love-bar b{color:var(--primary-dark)}
+  .heartbeat{display:inline-block;animation:beat 1.2s infinite}
+  @keyframes beat{0%,100%{transform:scale(1)}15%{transform:scale(1.25)}30%{transform:scale(1)}45%{transform:scale(1.15)}}
+
+  /* ---------- Messages ---------- */
+  #messages{flex:1;overflow-y:auto;padding:14px 12px 8px;display:flex;flex-direction:column;gap:4px;scroll-behavior:smooth}
+  .day-sep{align-self:center;font-size:11px;color:var(--muted);background:var(--card);padding:4px 12px;border-radius:999px;margin:10px 0 6px}
+  .row{display:flex;flex-direction:column;max-width:80%;animation:pop .25s ease-out}
+  .row.me{align-self:flex-end;align-items:flex-end}
+  .row.them{align-self:flex-start;align-items:flex-start}
+  @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}
+  .bubble{
+    padding:9px 14px;border-radius:20px;font-size:15.5px;line-height:1.35;word-wrap:break-word;white-space:pre-wrap;
+    box-shadow:0 2px 6px rgba(0,0,0,.06);position:relative;user-select:none;cursor:pointer
+  }
+  .me .bubble{background:var(--me);color:var(--me-text);border-bottom-right-radius:6px}
+  .them .bubble{background:var(--them);color:var(--them-text);border-bottom-left-radius:6px}
+  .bubble.big{background:transparent!important;box-shadow:none;font-size:46px;padding:0 4px;line-height:1.1}
+  .meta{font-size:10.5px;color:var(--muted);margin:2px 6px 6px;display:flex;gap:4px;align-items:center}
+  .reactions{display:flex;gap:2px;margin-top:-10px;margin-bottom:4px;z-index:1}
+  .reactions span{background:var(--card);border-radius:999px;padding:1px 6px;font-size:14px;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+  .reply-quote{font-size:12px;opacity:.85;border-left:3px solid currentColor;padding-left:8px;margin-bottom:4px}
+
+  .empty{margin:auto;text-align:center;color:var(--muted);padding:30px}
+  .empty .big-e{font-size:60px;animation:beat 1.6s infinite}
+
+  /* ---------- Typing ---------- */
+  .typing{align-self:flex-start;background:var(--them);padding:10px 14px;border-radius:20px;display:none;gap:4px;margin:4px 0}
+  .typing.on{display:flex}
+  .typing i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:dots 1.2s infinite}
+  .typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+  @keyframes dots{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-5px);opacity:1}}
+
+  /* ---------- Quick phrases ---------- */
+  .quick{display:flex;gap:6px;overflow-x:auto;padding:6px 12px;scrollbar-width:none}
+  .quick::-webkit-scrollbar{display:none}
+  .chip{flex-shrink:0;border:none;background:var(--card);color:var(--ink);padding:7px 12px;border-radius:999px;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.06);font-family:inherit}
+  .chip:active{transform:scale(.95)}
+
+  /* ---------- Composer ---------- */
+  .reply-bar{display:none;margin:0 12px;padding:6px 12px;background:var(--card);border-radius:12px 12px 0 0;font-size:12px;color:var(--muted);justify-content:space-between;align-items:center}
+  .reply-bar.on{display:flex}
+  .composer{display:flex;align-items:flex-end;gap:8px;padding:8px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  .input-wrap{flex:1;display:flex;align-items:flex-end;background:var(--card);border-radius:24px;padding:4px 6px;box-shadow:var(--shadow)}
+  textarea{flex:1;border:none;background:transparent;resize:none;font-family:inherit;font-size:16px;padding:8px 6px;max-height:110px;outline:none;color:var(--ink)}
+  textarea::placeholder{color:var(--muted)}
+  .send{width:46px;height:46px;border-radius:50%;border:none;background:var(--primary);color:#fff;font-size:20px;cursor:pointer;box-shadow:var(--shadow);flex-shrink:0;transition:transform .15s}
+  .send:active{transform:scale(.88)}
+
+  /* ---------- Who am I toggle ---------- */
+  .whoami{display:flex;justify-content:center;gap:6px;padding:0 12px 4px;font-size:12px;color:var(--muted);align-items:center}
+  .seg{display:flex;background:var(--card);border-radius:999px;padding:3px}
+  .seg button{border:none;background:transparent;padding:5px 12px;border-radius:999px;font-size:12px;cursor:pointer;font-family:inherit;color:var(--ink)}
+  .seg button.on{background:var(--primary);color:#fff;font-weight:700}
+
+  /* ---------- Emoji panel ---------- */
+  .emoji-panel{display:none;background:var(--card);backdrop-filter:blur(12px);margin:0 12px 4px;border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .emoji-panel.on{display:block;animation:pop .2s}
+  .tabs{display:flex;border-bottom:1px solid rgba(0,0,0,.06)}
+  .tabs button{flex:1;border:none;background:transparent;font-size:20px;padding:8px 0;cursor:pointer;opacity:.5}
+  .tabs button.on{opacity:1;border-bottom:3px solid var(--primary)}
+  .grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;padding:8px;height:190px;overflow-y:auto}
+  .grid button{border:none;background:transparent;font-size:26px;padding:4px;cursor:pointer;border-radius:10px}
+  .grid button:active{background:rgba(0,0,0,.06);transform:scale(1.2)}
+
+  /* ---------- Reaction popup ---------- */
+  .react-pop{position:fixed;display:none;background:var(--card);backdrop-filter:blur(12px);border-radius:999px;padding:6px 8px;box-shadow:0 8px 30px rgba(0,0,0,.2);z-index:50;gap:2px}
+  .react-pop.on{display:flex;animation:pop .15s}
+  .react-pop button{border:none;background:transparent;font-size:26px;cursor:pointer;padding:2px 4px;border-radius:50%}
+  .react-pop button:active{transform:scale(1.3)}
+  .react-pop .act{font-size:14px;padding:6px 8px;color:var(--ink);font-family:inherit}
+
+  /* ---------- Floating hearts ---------- */
+  .float{position:fixed;bottom:90px;font-size:28px;pointer-events:none;z-index:60;animation:floatUp 2.2s ease-out forwards}
+  @keyframes floatUp{0%{transform:translateY(0) scale(.6);opacity:1}100%{transform:translateY(-70vh) scale(1.4) rotate(20deg);opacity:0}}
+
+  /* ---------- Modal ---------- */
+  .modal-bg{position:fixed;inset:0;background:rgba(40,20,35,.45);display:none;align-items:flex-end;justify-content:center;z-index:100}
+  .modal-bg.on{display:flex}
+  .modal{background:var(--them);color:var(--them-text);width:100%;max-width:560px;border-radius:26px 26px 0 0;padding:22px 20px calc(22px + env(safe-area-inset-bottom));max-height:88dvh;overflow-y:auto;animation:slideUp .25s ease-out}
+  @keyframes slideUp{from{transform:translateY(100%)}to{transform:none}}
+  .modal h2{font-size:20px;margin-bottom:4px}
+  .modal p.hint{font-size:13px;color:var(--muted);margin-bottom:16px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12px;font-weight:700;margin-bottom:6px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .field input{width:100%;padding:12px 14px;border-radius:14px;border:2px solid rgba(0,0,0,.08);font-size:16px;font-family:inherit;background:transparent;color:inherit}
+  .field input:focus{outline:none;border-color:var(--primary)}
+  .pair{display:flex;gap:10px}.pair .field{flex:1}
+  .av-pick{display:flex;flex-wrap:wrap;gap:6px}
+  .av-pick button{font-size:24px;border:2px solid transparent;background:rgba(0,0,0,.04);border-radius:12px;padding:4px 6px;cursor:pointer}
+  .av-pick button.on{border-color:var(--primary);background:transparent}
+  .themes{display:flex;gap:10px}
+  .themes button{width:42px;height:42px;border-radius:50%;border:3px solid transparent;cursor:pointer}
+  .themes button.on{border-color:var(--ink)}
+  .btn{width:100%;padding:14px;border:none;border-radius:16px;background:var(--primary);color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:6px}
+  .btn.ghost{background:transparent;color:#e5484d;border:2px solid #e5484d33;font-weight:700}
+  .field textarea{width:100%;padding:10px 12px;border-radius:14px;border:2px solid rgba(0,0,0,.08);font-size:13px;font-family:ui-monospace,Menlo,monospace;background:transparent;color:inherit;max-height:none;resize:vertical}
+  .field textarea:focus{border-color:var(--primary)}
+  .status{font-size:13px;padding:10px 12px;border-radius:14px;margin-bottom:14px;background:rgba(0,0,0,.04)}
+  .status.ok{background:rgba(52,195,154,.15)}
+  .status.err{background:rgba(229,72,77,.12);color:#c0262c}
+  .tip{background:rgba(255,122,162,.12);border-radius:14px;padding:10px 12px;font-size:13px;margin-bottom:8px;display:flex;gap:8px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="avatars"><div class="av a" id="avA">🐻</div><div class="av b" id="avB">🐰</div></div>
+    <div class="h-info">
+      <div class="h-title" id="title">Nosotros 💕</div>
+      <div class="h-sub" id="subtitle">en línea</div>
+    </div>
+    <button class="icon-btn" id="connectOpen" title="Conectar en línea">🔗</button>
+    <button class="icon-btn" id="helpBtn" title="Ayuda">❓</button>
+    <button class="icon-btn" id="settingsBtn" title="Ajustes">⚙️</button>
+  </header>
+
+  <div class="love-bar">
+    <span><span class="heartbeat">💗</span> Juntos hace <b id="daysTogether">—</b></span>
+    <span id="msgCount" style="color:var(--muted)">0 mensajes</span>
+  </div>
+
+  <div id="messages"></div>
+  <div class="typing" id="typing" style="margin-left:12px"><i></i><i></i><i></i></div>
+
+  <div class="quick" id="quick"></div>
+
+  <div class="emoji-panel" id="emojiPanel">
+    <div class="tabs" id="tabs"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="whoami">
+    <span id="whoLabel">Escribiendo como:</span>
+    <div class="seg" id="seg"><button data-u="a" class="on">A</button><button data-u="b">B</button></div>
+  </div>
+
+  <div class="reply-bar" id="replyBar"><span id="replyText"></span><button class="icon-btn" id="cancelReply" style="font-size:14px">✕</button></div>
+
+  <div class="composer">
+    <div class="input-wrap">
+      <button class="icon-btn" id="emojiBtn" title="Emojis">😊</button>
+      <textarea id="input" rows="1" placeholder="Escribe algo bonito…"></textarea>
+    </div>
+    <button class="send" id="sendBtn" title="Enviar">💌</button>
+  </div>
+</div>
+
+<!-- Reacciones / acciones al tocar un mensaje -->
+<div class="react-pop" id="reactPop"></div>
+
+<!-- Modal de ajustes -->
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <h2>⚙️ Personaliza su chat</h2>
+    <p class="hint">Pon sus nombres, elige un avatar para cada uno y la fecha en que empezaron.</p>
+    <div class="pair">
+      <div class="field"><label>Persona A</label><input id="nameA" maxlength="16" placeholder="Tu nombre"></div>
+      <div class="field"><label>Persona B</label><input id="nameB" maxlength="16" placeholder="Su nombre"></div>
+    </div>
+    <div class="field"><label>Avatar A</label><div class="av-pick" id="pickA"></div></div>
+    <div class="field"><label>Avatar B</label><div class="av-pick" id="pickB"></div></div>
+    <div class="field"><label>Juntos desde</label><input type="date" id="since"></div>
+    <div class="field"><label>Tema</label>
+      <div class="themes" id="themes">
+        <button data-t="" style="background:linear-gradient(135deg,#ff7aa2,#ffe3ec)"></button>
+        <button data-t="theme-lila" style="background:linear-gradient(135deg,#a77bff,#e0f2fe)"></button>
+        <button data-t="theme-menta" style="background:linear-gradient(135deg,#34c39a,#dcfce7)"></button>
+        <button data-t="theme-noche" style="background:linear-gradient(135deg,#2a1f3d,#ff7aa2)"></button>
+      </div>
+    </div>
+    <button class="btn" id="saveSettings">Guardar 💾</button>
+    <button class="btn ghost" id="clearChat">Borrar todos los mensajes</button>
+  </div>
+</div>
+
+<!-- Modal de conexión -->
+<div class="modal-bg" id="connectModal">
+  <div class="modal">
+    <h2>🔗 Chatear en línea</h2>
+    <p class="hint">Los mensajes se guardan en su propia base de datos gratuita de Firebase. Se configura una sola vez (los pasos están en el README del repositorio).</p>
+    <div class="status" id="connStatus"></div>
+    <div id="connForm">
+      <div class="field"><label>Configuración de Firebase</label><textarea id="fbConfig" rows="7" placeholder="Pega aquí el bloque completo:&#10;const firebaseConfig = {&#10;  apiKey: &quot;...&quot;,&#10;  ...&#10;};"></textarea></div>
+      <div class="field"><label>URL de Realtime Database (si no viene arriba)</label><input id="dbUrl" placeholder="https://xxxx-default-rtdb.firebaseio.com"></div>
+      <div class="field"><label>Código secreto de la sala</label><input id="roomCode" maxlength="40"></div>
+      <button class="btn" id="connectBtn">Conectar 💞</button>
+    </div>
+    <div id="inviteBox" style="display:none">
+      <div class="field"><label>Link para tu pareja</label><input id="inviteLink" readonly></div>
+      <button class="btn" id="shareInvite">Enviar link a mi pareja 📲</button>
+      <button class="btn ghost" id="disconnectBtn">Desconectar este teléfono</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de ayuda -->
+<div class="modal-bg" id="helpModal">
+  <div class="modal">
+    <h2>💡 Cómo se usa</h2>
+    <p class="hint">Todo lo que necesitas saber en 30 segundos.</p>
+    <div class="tip">💌 <span>Escribe y toca el sobre para enviar. <b>Enter</b> envía, <b>Shift+Enter</b> hace salto de línea.</span></div>
+    <div class="tip">😊 <span>Abre el panel de emojis con la carita. Si envías solo emojis, salen <b>gigantes</b>.</span></div>
+    <div class="tip">❤️ <span>Toca un mensaje para <b>reaccionar</b>, responder o copiarlo. Doble toque = corazón rápido.</span></div>
+    <div class="tip">✨ <span>Las frases rápidas de abajo envían mensajes cariñosos con un toque.</span></div>
+    <div class="tip">🎉 <span>Envía ❤️, 😘 o 🥰 y verás una lluvia de corazones.</span></div>
+    <div class="tip">🔗 <span>Toca el <b>enlace</b> de arriba para conectar el chat en línea y mandarle el link a tu pareja. Así cada uno chatea desde su teléfono.</span></div>
+    <div class="tip">🙋 <span>Abajo, en <b>"Soy"</b>, cada uno elige quién es en su propio teléfono (tú A, tu pareja B).</span></div>
+    <button class="btn" id="closeHelp">¡Entendido! 💕</button>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   CAPA DE DATOS
+   - Sin conectar: modo prueba, todo queda en este navegador.
+   - Conectado (🔗): usa Firebase Realtime Database y los
+     mensajes llegan en tiempo real al teléfono de tu pareja.
+   ========================================================= */
+const FB_SDK = 'https://www.gstatic.com/firebasejs/10.14.1';
+const LOCAL_KEY = 'nuestro-chat-local-v1';   // datos de ESTE dispositivo
+const DATA_KEY  = 'nuestro-chat-v1';         // chat en modo prueba
+
+const Local = {
+  get(){ try{ return JSON.parse(localStorage.getItem(LOCAL_KEY)) || {} }catch(e){ return {} } },
+  set(v){ try{ localStorage.setItem(LOCAL_KEY, JSON.stringify(v)) }catch(e){} }
+};
+let local = Object.assign({me:'a', seenHelp:false, fb:null, room:''}, Local.get());
+const saveLocal = () => Local.set(local);
+
+/* ---------------- Estado compartido ---------------- */
+let state = {
+  users:{ a:{name:'Yo',avatar:'🐻'}, b:{name:'Mi amor',avatar:'🐰'} },
+  since:'', theme:'', messages:[]
+};
+let replyTo = null;
+let popTarget = null;
+
+/* ---------------- Emojis ---------------- */
+const EMOJIS = {
+  '❤️':'❤️ 🧡 💛 💚 💙 💜 🤍 🖤 💕 💞 💓 💗 💖 💘 💝 💟 ❣️ 💔 ❤️‍🔥 💋 💌 💐 🌹 🌷 🌸 💍 🫶 🤟 👩‍❤️‍👨 💑 💏 🥂',
+  '😊':'😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😙 🥲 😋 😛 😜 🤪 😝 🤗 🤭 🫢 🤫 🤔 😏 😌 😴 🥱 😪 🤤 😎 🥳 🤓 🥺 😢 😭 😤 😡 🤯 😳 🫠 😬 🙄 😶‍🌫️ 🤒 🤧',
+  '🐻':'🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🐤 🦄 🐝 🦋 🐌 🐞 🐢 🐙 🐬 🐳 🦭 🐟 🐠 🐡 🦈 🐾',
+  '🍕':'🍓 🍒 🍑 🍉 🍇 🍌 🍍 🥑 🍕 🍔 🍟 🌭 🌮 🍣 🍜 🍝 🥐 🧁 🍰 🎂 🍩 🍪 🍫 🍬 🍭 🍿 ☕ 🧋 🍷 🍺 🥤 🍦',
+  '🎉':'🎉 🎊 🎁 🎈 ✨ 🌟 ⭐ 🔥 🌈 ☀️ 🌙 ⛅ ☔ ❄️ 🌊 🏖️ ✈️ 🚗 🏠 🎬 🎮 🎵 🎧 📸 💤 💪 🙏 👏 👍 👌 ✌️ 🤞 👋 🙈 🙉 🙊 💯 ✅ ❓',
+};
+const QUICK = ['Te amo ❤️','Buenos días ☀️🥰','Te extraño 🥺','¿Cómo va tu día? 😊','Buenas noches 🌙💤','Pienso en ti 💭💕','Ya llegué 🏠','¿Comemos juntos? 🍕','Eres lo mejor 🫶','Muack 😘'];
+const AVATARS = ['🐻','🐰','🐱','🐶','🦊','🐼','🐨','🐯','🦁','🐧','🐸','🦄','🐝','🌸','🌻','⭐','🌙','👑','🧸','🍓'];
+const REACTS = ['❤️','😂','😮','🥺','😍','👍'];
+const LOVE_TRIGGERS = ['❤️','😘','🥰','😍','💕','💖','💗','💘','💞','🫶'];
+
+/* ---------------- Utilidades ---------------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const onlyEmoji = t => { const s=t.replace(/\s/g,''); return s.length>0 && s.length<=12 && /^(\p{Extended_Pictographic}|\p{Emoji_Component}|‍|️)+$/u.test(s) };
+const fmtTime = ts => new Date(ts).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+function fmtDay(ts){
+  const d=new Date(ts), t=new Date(); const y=new Date(); y.setDate(t.getDate()-1);
+  if(d.toDateString()===t.toDateString()) return 'Hoy';
+  if(d.toDateString()===y.toDateString()) return 'Ayer';
+  return d.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
+}
+const userOf = k => state.users[k] || {name:'?',avatar:'💬'};
+const other = () => local.me==='a' ? 'b' : 'a';
+const ROOM_RE = /^[A-Za-z0-9_-]{12,40}$/;
+const DB_RE = /^https:\/\/[A-Za-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)\/?$/;
+function newRoom(){
+  const abc='abcdefghijkmnpqrstuvwxyz23456789', a=new Uint8Array(20);
+  crypto.getRandomValues(a); return Array.from(a,x=>abc[x%abc.length]).join('');
+}
+const loadScript = src => new Promise((ok,ko)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=ko; document.head.appendChild(s) });
+
+/* Config de Firebase: solo se aceptan textos conocidos */
+function cleanConfig(o, dbUrl){
+  const keys=['apiKey','authDomain','databaseURL','projectId','storageBucket','messagingSenderId','appId'];
+  const c={}; keys.forEach(k=>{ if(o && typeof o[k]==='string') c[k]=o[k].trim() });
+  if(dbUrl) c.databaseURL=dbUrl.trim();
+  if(c.databaseURL) c.databaseURL=c.databaseURL.replace(/\/$/,'');
+  if(!c.apiKey) throw new Error('No encontré el "apiKey". Pega el bloque firebaseConfig completo.');
+  if(!DB_RE.test(c.databaseURL||'')) throw new Error('Falta la URL de Realtime Database (algo como https://xxxx-default-rtdb.firebaseio.com). Cópiala desde Firebase → Realtime Database.');
+  return c;
+}
+function parseConfig(txt, dbUrl){
+  let o={};
+  const i=txt.indexOf('{'), j=txt.lastIndexOf('}');
+  if(i>=0 && j>i){
+    let s=txt.slice(i,j+1).replace(/^\s*\/\/.*$/gm,'');
+    s=s.replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g,'$1"$2":').replace(/'/g,'"').replace(/,\s*}/g,'}');
+    try{ o=JSON.parse(s) }catch(e){ throw new Error('No pude leer la configuración. Copia el bloque tal cual sale en Firebase.') }
+  } else if(!dbUrl) throw new Error('Pega el bloque firebaseConfig que te da Firebase.');
+  return cleanConfig(o, dbUrl);
+}
+
+/* ---------------- Link de invitación (#join=...) ---------------- */
+const b64e = o => btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+const b64d = s => JSON.parse(decodeURIComponent(escape(atob(s))));
+let joinedNow = false;
+(function readInvite(){
+  const m = location.hash.match(/join=([^&]+)/); if(!m) return;
+  try{
+    const d=b64d(decodeURIComponent(m[1]));
+    const c=cleanConfig(d.c);
+    if(ROOM_RE.test(d.r)){
+      local.fb=c; local.room=d.r;
+      if(d.u==='a'||d.u==='b') local.me=d.u;
+      saveLocal(); joinedNow=true;
+    }
+  }catch(e){ console.warn('Link de invitación inválido', e) }
+  history.replaceState(null,'',location.pathname+location.search);
+})();
+function inviteLink(){
+  return location.origin+location.pathname+'#join='+encodeURIComponent(b64e({c:local.fb, r:local.room, u:other()}));
+}
+
+/* ---------------- Backend: modo prueba (local) ---------------- */
+function loadLocalData(){
+  try{
+    const d=JSON.parse(localStorage.getItem(DATA_KEY));
+    if(d){
+      if(d.users) state.users=d.users;
+      state.since=d.since||''; state.theme=d.theme||''; state.messages=d.messages||[];
+      if(d.seenHelp && !local.seenHelp){ local.seenHelp=true; saveLocal() }
+    }
+  }catch(e){}
+}
+const LocalBackend = {
+  name:'local', online:false, typing:{}, presence:{},
+  start(){ loadLocalData(); render(true) },
+  save(){ try{ localStorage.setItem(DATA_KEY, JSON.stringify({users:state.users,since:state.since,theme:state.theme,messages:state.messages})) }catch(e){} },
+  addMessage(m){ m.id=uid(); state.messages.push(m); this.save(); render(true) },
+  setReaction(id,who,r){ const m=state.messages.find(x=>x.id===id); if(!m) return; m.reactions=m.reactions||{}; if(r) m.reactions[who]=r; else delete m.reactions[who]; this.save(); renderMessages(false) },
+  deleteMessage(id){ state.messages=state.messages.filter(x=>x.id!==id); this.save(); render(false) },
+  saveSettings(s){ Object.assign(state,s); this.save(); render(false) },
+  clearAll(){ state.messages=[]; this.save(); render() },
+  setTyping(){}, setMe(){}
+};
+
+/* ---------------- Backend: en línea (Firebase) ---------------- */
+const FireBackend = {
+  name:'firebase', online:false, typing:{}, presence:{}, ref:null, ids:null, error:'',
+  async start(){
+    loadLocalData(); state.messages=[]; render(true);
+    try{
+      await loadScript(FB_SDK+'/firebase-app-compat.js');
+      await loadScript(FB_SDK+'/firebase-database-compat.js');
+    }catch(e){ return this.fail('No se pudo cargar Firebase. Revisa tu internet.') }
+    try{
+      const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(local.fb);
+      this.db = firebase.database(app);
+      this.TS = firebase.database.ServerValue.TIMESTAMP;
+      this.ref = this.db.ref('rooms/'+local.room);
+    }catch(e){ return this.fail('La configuración de Firebase no es válida: '+e.message) }
+
+    let firstSettings=true;
+    this.ref.child('settings').on('value', s=>{
+      const v=s.val();
+      if(v){ if(v.users) state.users=v.users; state.since=v.since||''; state.theme=v.theme||'' }
+      else if(firstSettings){ this.saveSettings({users:state.users,since:state.since,theme:state.theme}) }
+      firstSettings=false; render(false);
+    }, e=>this.fail(e));
+
+    this.ref.child('messages').orderByKey().limitToLast(500).on('value', s=>{
+      const list=[]; s.forEach(c=>{ const v=c.val(); if(v && typeof v.text==='string') list.push(Object.assign({id:c.key},v)) });
+      const first=this.ids===null, prev=this.ids||new Set();
+      const fresh=list.filter(m=>!prev.has(m.id));
+      this.ids=new Set(list.map(m=>m.id));
+      state.messages=list;
+      render(first || fresh.length>0);
+      if(!first) fresh.filter(m=>m.from!==local.me).forEach(m=>{
+        notifyNew(m);
+        if(!document.hidden && LOVE_TRIGGERS.some(e=>m.text.includes(e))) heartRain(m.text);
+      });
+    }, e=>this.fail(e));
+
+    this.ref.child('typing').on('value', s=>{ this.typing=s.val()||{}; updateTyping() });
+    this.ref.child('presence').on('value', s=>{ this.presence=s.val()||{}; updateSubtitle() });
+    this.db.ref('.info/connected').on('value', s=>{
+      this.online=!!s.val(); if(this.online) this.goOnline(); updateSubtitle();
+    });
+  },
+  fail(e){
+    const msg = typeof e==='string' ? e :
+      (String(e&&e.code||e).includes('permission') ? 'Firebase rechazó el acceso. Revisa que pegaste las reglas del README.' : 'Error de conexión: '+(e&&e.message||e));
+    this.error=msg; console.error(e); updateSubtitle();
+  },
+  goOnline(){
+    const p=this.ref.child('presence/'+local.me);
+    p.onDisconnect().set({online:false,last:this.TS});
+    p.set({online:true,last:this.TS});
+    this.ref.child('typing/'+local.me).onDisconnect().remove();
+  },
+  setMe(prev){
+    if(!this.ref) return;
+    const p=this.ref.child('presence/'+prev);
+    p.onDisconnect().cancel(); p.set({online:false,last:this.TS});
+    this.ref.child('typing/'+prev).remove();
+    if(this.online) this.goOnline();
+  },
+  addMessage(m){ m.ts=this.TS; this.ref.child('messages').push(m).catch(e=>this.fail(e)) },
+  setReaction(id,who,r){ this.ref.child(`messages/${id}/reactions/${who}`).set(r||null).catch(e=>this.fail(e)) },
+  deleteMessage(id){ this.ref.child('messages/'+id).remove().catch(e=>this.fail(e)) },
+  saveSettings(s){ this.ref.child('settings').set(s).catch(e=>this.fail(e)) },
+  clearAll(){ this.ref.child('messages').remove().catch(e=>this.fail(e)) },
+  setTyping(on){ if(this.ref) this.ref.child('typing/'+local.me).set(on?true:null) }
+};
+
+const backend = (local.fb && local.room) ? FireBackend : LocalBackend;
+
+/* ---------------- Render ---------------- */
+function renderHeader(){
+  const {a,b}=state.users;
+  $('#avA').textContent=a.avatar; $('#avB').textContent=b.avatar;
+  $('#title').textContent=`${a.name} & ${b.name} 💕`;
+  if(!$('#settingsModal').classList.contains('on')) document.body.className=state.theme||'';
+  $('#whoLabel').textContent = backend===FireBackend ? 'En este teléfono soy:' : 'Escribiendo como:';
+  document.querySelectorAll('#seg button').forEach(btn=>{
+    const u=userOf(btn.dataset.u);
+    btn.textContent=u.avatar+' '+u.name;
+    btn.classList.toggle('on',btn.dataset.u===local.me);
+  });
+  if(state.since){
+    const days=Math.floor((Date.now()-new Date(state.since+'T00:00'))/864e5);
+    const y=Math.floor(days/365), m=Math.floor((days%365)/30);
+    $('#daysTogether').textContent = days<0 ? '¡pronto!' : `${days} días` + (y? ` (${y} año${y>1?'s':''}${m?` y ${m} mes${m>1?'es':''}`:''})`:'');
+  } else $('#daysTogether').textContent='— (ponlo en ⚙️)';
+  $('#msgCount').textContent=`${state.messages.length} mensaje${state.messages.length===1?'':'s'}`;
+  updateSubtitle();
+}
+
+function updateSubtitle(){
+  const sub=$('#subtitle'), o=userOf(other());
+  if(backend===LocalBackend){ sub.textContent=`modo prueba · toca 🔗 para conectar`; return }
+  if(backend.error){ sub.textContent='⚠️ '+backend.error; return }
+  if(!backend.online){ sub.textContent='conectando…'; return }
+  const p=backend.presence[other()];
+  if(p && p.online) sub.textContent=`${o.name} está en línea 🟢`;
+  else if(p && p.last) sub.textContent=`${o.name} · últ. vez ${fmtDay(p.last).toLowerCase()} ${fmtTime(p.last)}`;
+  else sub.textContent=`esperando a que ${o.name} se una…`;
+}
+function updateTyping(){ $('#typing').classList.toggle('on', !!(backend.typing && backend.typing[other()])) }
+
+function renderMessages(scroll=true){
+  const box=$('#messages'), prevTop=box.scrollTop;
+  if(!state.messages.length){
+    box.innerHTML=`<div class="empty"><div class="big-e">💌</div><p><b>Su chat está vacío</b></p><p style="font-size:13px;margin-top:6px">Envía el primer mensaje o toca una frase rápida ✨</p></div>`;
+    return;
+  }
+  let html='', lastDay='';
+  for(const m of state.messages){
+    const ts=m.ts||Date.now();
+    const day=fmtDay(ts);
+    if(day!==lastDay){ html+=`<div class="day-sep">${day}</div>`; lastDay=day }
+    const side=m.from===local.me?'me':'them';
+    const big=onlyEmoji(m.text);
+    const rep=m.replyTo? state.messages.find(x=>x.id===m.replyTo):null;
+    const reacts=Object.values(m.reactions||{});
+    html+=`<div class="row ${side}" data-id="${esc(m.id)}">
+      <div class="bubble ${big?'big':''}">${rep?`<div class="reply-quote">${esc(userOf(rep.from).name)}: ${esc(rep.text.slice(0,50))}</div>`:''}${esc(m.text)}</div>
+      ${reacts.length?`<div class="reactions">${reacts.map(r=>`<span>${esc(r)}</span>`).join('')}</div>`:''}
+      <div class="meta">${side==='them'?userOf(m.from).avatar+' ':''}${fmtTime(ts)}${side==='me'?' ✓✓':''}</div>
+    </div>`;
+  }
+  box.innerHTML=html;
+  box.scrollTop = scroll ? box.scrollHeight : prevTop;
+}
+const render=(scroll=true)=>{ renderHeader(); renderMessages(scroll) };
+
+/* ---------------- Notificaciones ---------------- */
+const baseTitle=document.title; let unread=0;
+function notifyNew(m){
+  if(!document.hidden) return;
+  unread++; document.title=`(${unread}) 💌 ${baseTitle}`;
+  try{ navigator.vibrate && navigator.vibrate([60,40,60]) }catch(e){}
+  if('Notification' in window && Notification.permission==='granted'){
+    try{ new Notification(`${userOf(m.from).avatar} ${userOf(m.from).name}`, {body:m.text.slice(0,140), tag:'nuestro-chat'}) }catch(e){}
+  }
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ unread=0; document.title=baseTitle } });
+function askNotify(){
+  if(backend===FireBackend && 'Notification' in window && Notification.permission==='default'){
+    try{ Notification.requestPermission() }catch(e){}
+  }
+}
+
+/* ---------------- Enviar ---------------- */
+function send(text){
+  text=text.trim().slice(0,2000); if(!text) return;
+  const m={from:local.me,text,ts:Date.now()}; if(replyTo) m.replyTo=replyTo;
+  backend.addMessage(m);
+  replyTo=null; $('#replyBar').classList.remove('on');
+  stopTyping();
+  if(LOVE_TRIGGERS.some(e=>text.includes(e))) heartRain(text);
+  askNotify();
+}
+function heartRain(text){
+  const pool=LOVE_TRIGGERS.filter(e=>text.includes(e)).concat(['💕','💖','💗']);
+  for(let i=0;i<18;i++){
+    setTimeout(()=>{
+      const h=document.createElement('div'); h.className='float';
+      h.textContent=pool[Math.floor(Math.random()*pool.length)];
+      h.style.left=(10+Math.random()*80)+'vw';
+      h.style.fontSize=(20+Math.random()*22)+'px';
+      document.body.appendChild(h); setTimeout(()=>h.remove(),2300);
+    },i*90);
+  }
+}
+
+/* ---------------- Composer ---------------- */
+const input=$('#input');
+let typingOn=false, typingTimer=null;
+function stopTyping(){ clearTimeout(typingTimer); if(typingOn){ typingOn=false; backend.setTyping(false) } }
+input.addEventListener('input',()=>{
+  input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,110)+'px';
+  if(!input.value.trim()) return stopTyping();
+  if(!typingOn){ typingOn=true; backend.setTyping(true) }
+  clearTimeout(typingTimer); typingTimer=setTimeout(stopTyping,3000);
+});
+input.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); $('#sendBtn').click() } });
+$('#sendBtn').onclick=()=>{ send(input.value); input.value=''; input.style.height='auto'; input.focus() };
+
+/* ---------------- Frases rápidas ---------------- */
+$('#quick').innerHTML=QUICK.map(q=>`<button class="chip">${q}</button>`).join('');
+$('#quick').onclick=e=>{ if(e.target.classList.contains('chip')) send(e.target.textContent) };
+
+/* ---------------- Panel de emojis ---------------- */
+const cats=Object.keys(EMOJIS);
+$('#tabs').innerHTML=cats.map((c,i)=>`<button data-c="${c}" class="${i?'':'on'}">${c}</button>`).join('');
+function showCat(c){
+  $('#grid').innerHTML=EMOJIS[c].split(' ').map(e=>`<button>${e}</button>`).join('');
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.c===c));
+}
+showCat(cats[0]);
+$('#tabs').onclick=e=>{ const b=e.target.closest('button'); if(b) showCat(b.dataset.c) };
+$('#grid').onclick=e=>{
+  if(e.target.tagName!=='BUTTON') return;
+  const s=input.selectionStart??input.value.length;
+  input.value=input.value.slice(0,s)+e.target.textContent+input.value.slice(s);
+  input.dispatchEvent(new Event('input'));
+};
+$('#emojiBtn').onclick=()=>$('#emojiPanel').classList.toggle('on');
+
+/* ---------------- Quién soy ---------------- */
+$('#seg').onclick=e=>{
+  const b=e.target.closest('button'); if(!b || b.dataset.u===local.me) return;
+  const prev=local.me; stopTyping();
+  local.me=b.dataset.u; saveLocal();
+  backend.setMe(prev); render(false); updateTyping();
+};
+
+/* ---------------- Reacciones / acciones ---------------- */
+const pop=$('#reactPop');
+pop.innerHTML=REACTS.map(r=>`<button data-r="${r}">${r}</button>`).join('')+
+  `<button class="act" data-a="reply">↩️</button><button class="act" data-a="copy">📋</button><button class="act" data-a="del">🗑️</button>`;
+let lastTap={id:null,t:0};
+$('#messages').addEventListener('click',e=>{
+  const bubble=e.target.closest('.bubble'); if(!bubble) return;
+  const id=bubble.parentElement.dataset.id;
+  const now=Date.now();
+  if(lastTap.id===id && now-lastTap.t<320){ toggleReact(id,'❤️'); hidePop(); lastTap={id:null,t:0}; return }
+  lastTap={id,t:now};
+  popTarget=id;
+  const r=bubble.getBoundingClientRect();
+  pop.classList.add('on');
+  const w=pop.offsetWidth;
+  pop.style.left=Math.max(8,Math.min(window.innerWidth-w-8, r.left+r.width/2-w/2))+'px';
+  pop.style.top=Math.max(8,r.top-56)+'px';
+  e.stopPropagation();
+});
+function hidePop(){ pop.classList.remove('on'); popTarget=null }
+document.addEventListener('click',e=>{ if(!pop.contains(e.target)) hidePop() });
+function toggleReact(id,r){
+  const m=state.messages.find(x=>x.id===id); if(!m) return;
+  const cur=(m.reactions||{})[local.me];
+  backend.setReaction(id, local.me, cur===r ? null : r);
+}
+pop.onclick=e=>{
+  const b=e.target.closest('button'); if(!b||!popTarget) return;
+  const m=state.messages.find(x=>x.id===popTarget); if(!m) return hidePop();
+  if(b.dataset.r) toggleReact(popTarget,b.dataset.r);
+  else if(b.dataset.a==='reply'){ replyTo=m.id; $('#replyText').textContent=`↩️ Respondiendo a: ${m.text.slice(0,40)}`; $('#replyBar').classList.add('on'); input.focus() }
+  else if(b.dataset.a==='copy'){ navigator.clipboard?.writeText(m.text) }
+  else if(b.dataset.a==='del'){ if(confirm('¿Borrar este mensaje? Se borrará para los dos.')) backend.deleteMessage(m.id) }
+  hidePop();
+};
+$('#cancelReply').onclick=()=>{ replyTo=null; $('#replyBar').classList.remove('on') };
+
+/* ---------------- Ajustes ---------------- */
+let tmp={};
+function avPicker(el,key){
+  el.innerHTML=AVATARS.map(a=>`<button class="${tmp[key]===a?'on':''}">${a}</button>`).join('');
+  el.onclick=e=>{ if(e.target.tagName!=='BUTTON') return; tmp[key]=e.target.textContent; avPicker(el,key) };
+}
+$('#settingsBtn').onclick=()=>{
+  tmp={avA:state.users.a.avatar,avB:state.users.b.avatar,theme:state.theme};
+  $('#nameA').value=state.users.a.name; $('#nameB').value=state.users.b.name; $('#since').value=state.since;
+  avPicker($('#pickA'),'avA'); avPicker($('#pickB'),'avB');
+  document.querySelectorAll('#themes button').forEach(b=>b.classList.toggle('on',b.dataset.t===tmp.theme));
+  $('#settingsModal').classList.add('on');
+};
+$('#themes').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return; tmp.theme=b.dataset.t;
+  document.body.className=tmp.theme;
+  document.querySelectorAll('#themes button').forEach(x=>x.classList.toggle('on',x===b));
+};
+$('#saveSettings').onclick=()=>{
+  $('#settingsModal').classList.remove('on');
+  backend.saveSettings({
+    users:{
+      a:{name:$('#nameA').value.trim()||'Yo',avatar:tmp.avA},
+      b:{name:$('#nameB').value.trim()||'Mi amor',avatar:tmp.avB}
+    },
+    since:$('#since').value, theme:tmp.theme
+  });
+};
+$('#clearChat').onclick=()=>{ if(confirm('¿Seguro? Se borrarán todos los mensajes para los dos 🥺')){ backend.clearAll(); $('#settingsModal').classList.remove('on') } };
+
+/* ---------------- Conexión en línea ---------------- */
+function openConnect(){
+  const st=$('#connStatus');
+  if(backend===FireBackend){
+    st.className='status '+(backend.error?'err':'ok');
+    st.textContent = backend.error ? '⚠️ '+backend.error : '✅ Conectado. Envíale este link a tu pareja para que entre al mismo chat (ábrelo en su teléfono).';
+    $('#connForm').style.display='none'; $('#inviteBox').style.display='block';
+    $('#inviteLink').value=inviteLink();
+  } else {
+    st.className='status';
+    st.textContent='Ahora estás en modo prueba: los mensajes solo quedan en este teléfono.';
+    $('#connForm').style.display='block'; $('#inviteBox').style.display='none';
+    if(!$('#roomCode').value) $('#roomCode').value=newRoom();
+  }
+  $('#connectModal').classList.add('on');
+}
+$('#connectOpen').onclick=openConnect;
+$('#connectBtn').onclick=()=>{
+  const st=$('#connStatus');
+  try{
+    const cfg=parseConfig($('#fbConfig').value, $('#dbUrl').value);
+    const room=$('#roomCode').value.trim();
+    if(!ROOM_RE.test(room)) throw new Error('El código de sala debe tener entre 12 y 40 letras o números (sin espacios).');
+    local.fb=cfg; local.room=room; local.me=local.me||'a'; saveLocal();
+    location.reload();
+  }catch(e){ st.className='status err'; st.textContent='⚠️ '+e.message }
+};
+$('#shareInvite').onclick=async()=>{
+  const url=inviteLink();
+  if(navigator.share){ try{ await navigator.share({title:'Nuestro Chat 💕',text:'Entra a nuestro chat 💕',url}); return }catch(e){ if(e.name==='AbortError') return } }
+  try{ await navigator.clipboard.writeText(url); alert('Link copiado 📋 Pégaselo a tu pareja por WhatsApp.') }
+  catch(e){ $('#inviteLink').select() }
+};
+$('#inviteLink').onclick=e=>e.target.select();
+$('#disconnectBtn').onclick=()=>{
+  if(!confirm('¿Desconectar este teléfono? Los mensajes siguen guardados en línea; puedes volver a entrar con el link.')) return;
+  local.fb=null; local.room=''; saveLocal(); location.reload();
+};
+
+/* ---------------- Ayuda ---------------- */
+$('#helpBtn').onclick=()=>$('#helpModal').classList.add('on');
+$('#closeHelp').onclick=()=>{ $('#helpModal').classList.remove('on'); local.seenHelp=true; saveLocal() };
+document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{ if(e.target===bg){ bg.classList.remove('on'); document.body.className=state.theme||'' } }));
+
+/* ---------------- Inicio ---------------- */
+backend.start();
+if(joinedNow){ local.seenHelp=true; saveLocal(); setTimeout(()=>alert('¡Listo! 💕 Ya estás en el chat.\nRevisa abajo en "Soy" que esté marcado tu nombre.'),800) }
+else if(!local.seenHelp) setTimeout(()=>$('#helpBtn').click(),500);
+</script>
+</body>
+</html>
