@@ -150,6 +150,7 @@
   .btn.ghost{background:transparent;color:#e5484d;border:2px solid #e5484d33;font-weight:700}
   .field textarea{width:100%;padding:10px 12px;border-radius:14px;border:2px solid rgba(0,0,0,.08);font-size:13px;font-family:ui-monospace,Menlo,monospace;background:transparent;color:inherit;max-height:none;resize:vertical}
   .field textarea:focus{border-color:var(--primary)}
+  .btn.soft{background:transparent;color:var(--primary-dark);border:2px solid var(--primary)}
   .status{font-size:13px;padding:10px 12px;border-radius:14px;margin-bottom:14px;background:rgba(0,0,0,.04)}
   .status.ok{background:rgba(52,195,154,.15)}
   .status.err{background:rgba(229,72,77,.12);color:#c0262c}
@@ -232,19 +233,19 @@
 <!-- Modal de conexión -->
 <div class="modal-bg" id="connectModal">
   <div class="modal">
-    <h2>🔗 Chatear en línea</h2>
-    <p class="hint">Los mensajes se guardan en su propia base de datos gratuita de Firebase. Se configura una sola vez (los pasos están en el README del repositorio).</p>
+    <h2>🔗 Conectar con mi pareja</h2>
+    <p class="hint">Sin cuentas ni base de datos: los mensajes viajan cifrados directo entre sus teléfonos y cada uno guarda su historial.</p>
     <div class="status" id="connStatus"></div>
     <div id="connForm">
-      <div class="field"><label>Configuración de Firebase</label><textarea id="fbConfig" rows="7" placeholder="Pega aquí el bloque completo:&#10;const firebaseConfig = {&#10;  apiKey: &quot;...&quot;,&#10;  ...&#10;};"></textarea></div>
-      <div class="field"><label>URL de Realtime Database (si no viene arriba)</label><input id="dbUrl" placeholder="https://xxxx-default-rtdb.firebaseio.com"></div>
-      <div class="field"><label>Código secreto de la sala</label><input id="roomCode" maxlength="40"></div>
-      <button class="btn" id="connectBtn">Conectar 💞</button>
+      <button class="btn" id="createRoom">Crear nuestro chat 💞</button>
+      <p class="hint" style="margin:18px 0 8px;text-align:center">¿Tu pareja ya lo creó? Abre el link que te mandó, o pégalo aquí:</p>
+      <div class="field"><input id="joinCode" placeholder="Pega aquí el link de invitación"></div>
+      <button class="btn soft" id="joinRoom">Unirme 💌</button>
     </div>
     <div id="inviteBox" style="display:none">
       <div class="field"><label>Link para tu pareja</label><input id="inviteLink" readonly></div>
       <button class="btn" id="shareInvite">Enviar link a mi pareja 📲</button>
-      <button class="btn ghost" id="disconnectBtn">Desconectar este teléfono</button>
+      <button class="btn ghost" id="disconnectBtn">Salir del chat en este teléfono</button>
     </div>
   </div>
 </div>
@@ -259,7 +260,8 @@
     <div class="tip">❤️ <span>Toca un mensaje para <b>reaccionar</b>, responder o copiarlo. Doble toque = corazón rápido.</span></div>
     <div class="tip">✨ <span>Las frases rápidas de abajo envían mensajes cariñosos con un toque.</span></div>
     <div class="tip">🎉 <span>Envía ❤️, 😘 o 🥰 y verás una lluvia de corazones.</span></div>
-    <div class="tip">🔗 <span>Toca el <b>enlace</b> de arriba para conectar el chat en línea y mandarle el link a tu pareja. Así cada uno chatea desde su teléfono.</span></div>
+    <div class="tip">🔗 <span>Toca el <b>enlace</b> de arriba → <b>Crear nuestro chat</b> y mándale el link a tu pareja. Así cada uno chatea desde su teléfono.</span></div>
+    <div class="tip">📶 <span>Los mensajes llegan al instante cuando <b>los dos tienen el chat abierto</b>. ✓ = enviado, ✓✓ = le llegó. Si no estaba, se entrega solo cuando ambos vuelvan a abrirlo.</span></div>
     <div class="tip">🙋 <span>Abajo, en <b>"Soy"</b>, cada uno elige quién es en su propio teléfono (tú A, tu pareja B).</span></div>
     <button class="btn" id="closeHelp">¡Entendido! 💕</button>
   </div>
@@ -267,31 +269,289 @@
 
 <script>
 /* =========================================================
-   CAPA DE DATOS
-   - Sin conectar: modo prueba, todo queda en este navegador.
-   - Conectado (🔗): usa Firebase Realtime Database y los
-     mensajes llegan en tiempo real al teléfono de tu pareja.
+   NUESTRO CHAT — sin base de datos
+   - Cada teléfono guarda su propio historial (localStorage).
+   - Los mensajes viajan al instante por un relevo MQTT público,
+     CIFRADOS (AES-GCM) con la clave secreta del link de invitación.
+     El relevo no guarda nada y no puede leer los mensajes.
+   - Para que un mensaje llegue, los dos deben tener el chat abierto.
+     Lo escrito mientras el otro no estaba se envía solo al reencontrarse.
    ========================================================= */
-const FB_SDK = 'https://www.gstatic.com/firebasejs/10.14.1';
-const LOCAL_KEY = 'nuestro-chat-local-v1';   // datos de ESTE dispositivo
-const DATA_KEY  = 'nuestro-chat-v1';         // chat en modo prueba
+const MQTT_LIB = 'https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js';
+const BROKERS  = window.CHAT_BROKERS || [
+  'wss://broker.hivemq.com:8884/mqtt',
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://test.mosquitto.org:8081'
+];
+const LOCAL_KEY = 'nuestro-chat-local-v2';   // ajustes de ESTE teléfono
+const DATA_KEY  = 'nuestro-chat-v1';         // historial guardado en este teléfono
+const ONLINE_MS = 50000;                     // sin señales en 50 s = desconectado
 
+/* ---------------- Utilidades ---------------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,9);
+const onlyEmoji = t => { const s=t.replace(/\s/g,''); return s.length>0 && s.length<=12 && /^(\p{Extended_Pictographic}|\p{Emoji_Component}|‍|️)+$/u.test(s) };
+const fmtTime = ts => new Date(ts).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+function fmtDay(ts){
+  const d=new Date(ts), t=new Date(); const y=new Date(); y.setDate(t.getDate()-1);
+  if(d.toDateString()===t.toDateString()) return 'Hoy';
+  if(d.toDateString()===y.toDateString()) return 'Ayer';
+  return d.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
+}
+const loadScript = src => new Promise((ok,ko)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=ko; document.head.appendChild(s) });
+const ROOM_RE = /^[A-Za-z0-9_-]{16,64}$/;
+function newSecret(){
+  const abc='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789', a=new Uint8Array(24);
+  crypto.getRandomValues(a); return Array.from(a,x=>abc[x%abc.length]).join('');
+}
+
+/* ---------------- Datos de este teléfono ---------------- */
 const Local = {
   get(){ try{ return JSON.parse(localStorage.getItem(LOCAL_KEY)) || {} }catch(e){ return {} } },
   set(v){ try{ localStorage.setItem(LOCAL_KEY, JSON.stringify(v)) }catch(e){} }
 };
-let local = Object.assign({me:'a', seenHelp:false, fb:null, room:''}, Local.get());
+let local = Object.assign({me:'a', seenHelp:false, room:'', dev:''}, Local.get());
+if(!local.dev){ local.dev=uid() }
+(function migrate(){ try{ const old=JSON.parse(localStorage.getItem('nuestro-chat-local-v1')); if(old&&old.seenHelp) local.seenHelp=true; if(old&&old.me) local.me=old.me }catch(e){} })();
 const saveLocal = () => Local.set(local);
+saveLocal();
 
-/* ---------------- Estado compartido ---------------- */
 let state = {
   users:{ a:{name:'Yo',avatar:'🐻'}, b:{name:'Mi amor',avatar:'🐰'} },
-  since:'', theme:'', messages:[]
+  since:'', theme:'', sv:0, messages:[], deleted:[], clearedAt:0, partnerLast:0
 };
-let replyTo = null;
-let popTarget = null;
+try{
+  const d=JSON.parse(localStorage.getItem(DATA_KEY));
+  if(d){ Object.assign(state, d); if(d.seenHelp) local.seenHelp=true; delete state.me; delete state.seenHelp }
+}catch(e){}
+const persist = () => { try{ localStorage.setItem(DATA_KEY, JSON.stringify(state)) }catch(e){} };
+const userOf = k => state.users[k] || {name:'?',avatar:'💬'};
+const other = () => local.me==='a' ? 'b' : 'a';
+let replyTo=null, popTarget=null;
 
-/* ---------------- Emojis ---------------- */
+/* ---------------- Link de invitación (#join=CLAVE&u=b) ---------------- */
+let joinedNow=false;
+function extractSecret(txt){
+  txt=String(txt||'').trim();
+  const m=txt.match(/join=([A-Za-z0-9_-]+)/); const s=m?m[1]:txt;
+  return ROOM_RE.test(s) ? s : null;
+}
+(function readInvite(){
+  const h=location.hash; if(!h.includes('join=')) return;
+  const secret=extractSecret(h), u=(h.match(/[&#]u=([ab])/)||[])[1];
+  if(secret){
+    if(secret!==local.room){ state.messages=[]; state.deleted=[]; state.clearedAt=0; state.sv=0; persist() }
+    local.room=secret; if(u) local.me=u; local.seenHelp=true; saveLocal(); joinedNow=true;
+  }
+  history.replaceState(null,'',location.pathname+location.search);
+})();
+const inviteLink = () => location.origin+location.pathname+'#join='+local.room+'&u='+other();
+
+/* ---------------- Cifrado ---------------- */
+const TE=new TextEncoder(), TD=new TextDecoder();
+const sha = async s => new Uint8Array(await crypto.subtle.digest('SHA-256', TE.encode(s)));
+const hex = a => Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');
+function b64(a){ let s=''; for(let i=0;i<a.length;i+=8192) s+=String.fromCharCode.apply(null,a.subarray(i,i+8192)); return btoa(s) }
+const unb64 = s => Uint8Array.from(atob(s), c=>c.charCodeAt(0));
+let KEY=null, TOPIC='';
+async function initCrypto(secret){
+  KEY = await crypto.subtle.importKey('raw', await sha('nuestro-chat:key:'+secret), 'AES-GCM', false, ['encrypt','decrypt']);
+  TOPIC = 'nuestro-chat/v1/'+hex(await sha('nuestro-chat:topic:'+secret)).slice(0,40);
+}
+async function seal(obj){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv}, KEY, TE.encode(JSON.stringify(obj))));
+  const out=new Uint8Array(12+ct.length); out.set(iv); out.set(ct,12); return b64(out);
+}
+async function unseal(str){
+  const a=unb64(str);
+  return JSON.parse(TD.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:a.slice(0,12)}, KEY, a.slice(12))));
+}
+
+/* ---------------- Validación de lo que llega ---------------- */
+const isStr = (v,max) => typeof v==='string' && v.length<=max;
+function cleanMsg(m){
+  if(!m || !isStr(m.id,40) || (m.from!=='a'&&m.from!=='b') || !isStr(m.text,2000) || !m.text || typeof m.ts!=='number') return null;
+  const c={id:m.id, from:m.from, text:m.text, ts:m.ts};
+  if(isStr(m.replyTo,40)) c.replyTo=m.replyTo;
+  if(m.reactions && typeof m.reactions==='object'){
+    c.reactions={}; ['a','b'].forEach(k=>{ if(isStr(m.reactions[k],16)) c.reactions[k]=m.reactions[k] });
+  }
+  return c;
+}
+function cleanSettings(s){
+  if(!s || !s.users) return null;
+  const u={};
+  for(const k of ['a','b']){
+    const x=s.users[k]; if(!x || !isStr(x.name,16) || !isStr(x.avatar,16)) return null;
+    u[k]={name:x.name, avatar:x.avatar};
+  }
+  return { users:u, since:isStr(s.since,10)&&/^(\d{4}-\d{2}-\d{2})?$/.test(s.since)?s.since:'',
+           theme:['','theme-lila','theme-menta','theme-noche'].includes(s.theme)?s.theme:'' };
+}
+const settingsPayload = () => ({users:state.users, since:state.since, theme:state.theme});
+
+/* ---------------- Operaciones sobre el historial ---------------- */
+function mergeMessages(list, live){
+  let added=[];
+  const del=new Set(state.deleted);
+  for(const raw of list||[]){
+    const m=cleanMsg(raw); if(!m || del.has(m.id) || m.ts<=state.clearedAt) continue;
+    const ex=state.messages.find(x=>x.id===m.id);
+    if(ex){
+      if(ex.from===local.me) ex.got=true;                    // mi pareja lo tiene
+      const o=other();                                       // su reacción manda
+      if(m.reactions && m.reactions[o]){ ex.reactions=ex.reactions||{}; ex.reactions[o]=m.reactions[o] }
+    } else {
+      if(m.from===local.me) m.got=true;
+      state.messages.push(m); added.push(m);
+    }
+  }
+  if(added.length){
+    state.messages.sort((x,y)=>x.ts-y.ts);
+    if(state.messages.length>3000) state.messages=state.messages.slice(-3000);
+  }
+  persist();
+  render(added.length>0);
+  if(live) added.filter(m=>m.from!==local.me).forEach(m=>{
+    notifyNew(m);
+    if(!document.hidden && LOVE_TRIGGERS.some(e=>m.text.includes(e))) heartRain(m.text);
+  });
+  return added;
+}
+function applyDeletes(ids){
+  const set=new Set(ids.filter(x=>isStr(x,40))); if(!set.size) return;
+  state.deleted=[...new Set(state.deleted.concat([...set]))].slice(-500);
+  state.messages=state.messages.filter(m=>!set.has(m.id));
+}
+function applyClear(ts){
+  if(typeof ts!=='number' || ts<=state.clearedAt) return;
+  state.clearedAt=ts; state.messages=state.messages.filter(m=>m.ts>ts);
+}
+function applySettings(s, sv){
+  const c=cleanSettings(s); if(!c || typeof sv!=='number' || sv<=state.sv) return false;
+  Object.assign(state, c, {sv}); return true;
+}
+const lastFromOther = () => { for(let i=state.messages.length-1;i>=0;i--) if(state.messages[i].from!==local.me) return state.messages[i].ts; return 0 };
+const wire = m => { const c=Object.assign({},m); delete c.got; return c };
+
+/* ---------------- Relevo en tiempo real ---------------- */
+const Relay = {
+  enabled:false, clients:[], seen:new Set(), error:'', typing:false, typingTimer:null,
+  partnerSeen:0, helloTimer:null,
+  get connected(){ return this.clients.some(c=>c.connected) },
+  get partnerOnline(){ return Date.now()-this.partnerSeen < ONLINE_MS },
+
+  async start(){
+    if(!local.room) return;
+    this.enabled=true; updateSubtitle();
+    try{ await initCrypto(local.room) }catch(e){ return this.fail('Este navegador no permite cifrar. Abre el chat desde el link https.') }
+    try{ if(!window.mqtt) await loadScript(MQTT_LIB) }catch(e){ return this.fail('No se pudo conectar. Revisa tu internet y recarga.') }
+    for(const url of BROKERS){
+      let c; try{ c=mqtt.connect(url,{clientId:'nc_'+uid(), clean:true, keepalive:30, reconnectPeriod:5000, connectTimeout:10000}) }catch(e){ continue }
+      c.on('connect',()=>{ c.subscribe(TOPIC,{qos:0}); this.error=''; updateSubtitle(); this.hello(false) });
+      c.on('close',()=>updateSubtitle());
+      c.on('error',()=>{});
+      c.on('message',(t,p)=>this.receive(TD.decode(p)));
+      this.clients.push(c);
+    }
+    setInterval(()=>{ if(!document.hidden) this.send({t:'ping'}); updateSubtitle() }, 20000);
+    document.addEventListener('visibilitychange',()=>{ if(document.hidden) this.send({t:'bye'}); else this.hello(false) });
+    window.addEventListener('pagehide',()=>this.send({t:'bye'}));
+  },
+  fail(msg){ this.error=msg; updateSubtitle() },
+
+  async send(o){
+    if(!this.enabled || !KEY) return false;
+    o.from=local.me; o.dev=local.dev; o.n=uid();
+    const p=await seal(o); let ok=false;
+    for(const c of this.clients) if(c.connected){ c.publish(TOPIC,p,{qos:0}); ok=true }
+    return ok;
+  },
+  hello(reply){
+    clearTimeout(this.helloTimer);
+    this.helloTimer=setTimeout(()=>this.send({t:'hello', reply, last:lastFromOther(), s:settingsPayload(), sv:state.sv, clearedAt:state.clearedAt}), reply?50:400);
+  },
+  sendSync(last){
+    const since=(typeof last==='number'?last:0)-5*60000;
+    const msgs=state.messages.filter(m=>m.ts>since).slice(-150).map(wire);
+    this.send({t:'sync', msgs, deleted:state.deleted.slice(-300), s:settingsPayload(), sv:state.sv, clearedAt:state.clearedAt});
+  },
+
+  async receive(str){
+    let o; try{ o=await unseal(str) }catch(e){ return }       // no es de nuestra sala
+    if(!o || o.dev===local.dev || !isStr(o.n,40) || this.seen.has(o.n)) return;
+    this.seen.add(o.n);
+    if(o.t==='bye'){ this.partnerSeen=0; this.setTyping(false); state.partnerLast=Date.now(); persist(); updateSubtitle(); return }
+    this.partnerSeen=Date.now(); state.partnerLast=this.partnerSeen;
+    let dirty=false;
+    switch(o.t){
+      case 'msg': {
+        const added=mergeMessages([o.m], true);
+        this.setTyping(false);
+        if(o.m && isStr(o.m.id,40)) this.send({t:'ack', ids:[o.m.id]});
+        break;
+      }
+      case 'ack':
+        (o.ids||[]).forEach(id=>{ const m=state.messages.find(x=>x.id===id); if(m && !m.got){ m.got=true; dirty=true } });
+        if(dirty){ persist(); renderMessages(false) }
+        break;
+      case 'react': {
+        const m=state.messages.find(x=>x.id===o.id);
+        if(m && (o.who==='a'||o.who==='b')){ m.reactions=m.reactions||{}; if(isStr(o.r,16)&&o.r) m.reactions[o.who]=o.r; else delete m.reactions[o.who]; persist(); renderMessages(false) }
+        break;
+      }
+      case 'del': applyDeletes([o.id]); persist(); render(false); break;
+      case 'clear': applyClear(o.ts); persist(); render(); break;
+      case 'settings': if(applySettings(o.s,o.sv)){ persist(); render(false) } break;
+      case 'typing': this.setTyping(!!o.on); break;
+      case 'hello':
+      case 'sync': {
+        if(typeof o.clearedAt==='number') applyClear(o.clearedAt);
+        applySettings(o.s,o.sv);
+        if(Array.isArray(o.deleted)) applyDeletes(o.deleted);
+        if(o.t==='sync'){
+          mergeMessages(o.msgs, false);
+          const ids=(o.msgs||[]).filter(m=>m&&m.from!==local.me&&isStr(m.id,40)).map(m=>m.id);
+          if(ids.length) this.send({t:'ack', ids});
+        } else {
+          persist(); render(false);
+          this.sendSync(o.last);
+          if(!o.reply) this.hello(true);
+        }
+        break;
+      }
+    }
+    updateSubtitle();
+  },
+  setTyping(on){
+    this.typing=on; clearTimeout(this.typingTimer);
+    if(on) this.typingTimer=setTimeout(()=>this.setTyping(false), 6000);
+    updateTyping();
+  }
+};
+
+/* ---------------- Acciones (local + envío) ---------------- */
+const Chat = {
+  addMessage(m){
+    m.id=uid(); m.got=false;
+    state.messages.push(m); persist(); render(true);
+    Relay.send({t:'msg', m:wire(m)});
+  },
+  setReaction(id,r){
+    const m=state.messages.find(x=>x.id===id); if(!m) return;
+    m.reactions=m.reactions||{}; if(r) m.reactions[local.me]=r; else delete m.reactions[local.me];
+    persist(); renderMessages(false);
+    Relay.send({t:'react', id, who:local.me, r:r||''});
+  },
+  deleteMessage(id){ applyDeletes([id]); persist(); render(false); Relay.send({t:'del', id}) },
+  saveSettings(s){ Object.assign(state, s, {sv:Date.now()}); persist(); render(false); Relay.send({t:'settings', s:settingsPayload(), sv:state.sv}) },
+  clearAll(){ const ts=Date.now(); applyClear(ts); persist(); render(); Relay.send({t:'clear', ts}) },
+  setTyping(on){ Relay.send({t:'typing', on}) }
+};
+
+/* ---------------- Emojis y frases ---------------- */
 const EMOJIS = {
   '❤️':'❤️ 🧡 💛 💚 💙 💜 🤍 🖤 💕 💞 💓 💗 💖 💘 💝 💟 ❣️ 💔 ❤️‍🔥 💋 💌 💐 🌹 🌷 🌸 💍 🫶 🤟 👩‍❤️‍👨 💑 💏 🥂',
   '😊':'😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😙 🥲 😋 😛 😜 🤪 😝 🤗 🤭 🫢 🤫 🤔 😏 😌 😴 🥱 😪 🤤 😎 🥳 🤓 🥺 😢 😭 😤 😡 🤯 😳 🫠 😬 🙄 😶‍🌫️ 🤒 🤧',
@@ -304,171 +564,13 @@ const AVATARS = ['🐻','🐰','🐱','🐶','🦊','🐼','🐨','🐯','🦁',
 const REACTS = ['❤️','😂','😮','🥺','😍','👍'];
 const LOVE_TRIGGERS = ['❤️','😘','🥰','😍','💕','💖','💗','💘','💞','🫶'];
 
-/* ---------------- Utilidades ---------------- */
-const $ = s => document.querySelector(s);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-const onlyEmoji = t => { const s=t.replace(/\s/g,''); return s.length>0 && s.length<=12 && /^(\p{Extended_Pictographic}|\p{Emoji_Component}|‍|️)+$/u.test(s) };
-const fmtTime = ts => new Date(ts).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
-function fmtDay(ts){
-  const d=new Date(ts), t=new Date(); const y=new Date(); y.setDate(t.getDate()-1);
-  if(d.toDateString()===t.toDateString()) return 'Hoy';
-  if(d.toDateString()===y.toDateString()) return 'Ayer';
-  return d.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
-}
-const userOf = k => state.users[k] || {name:'?',avatar:'💬'};
-const other = () => local.me==='a' ? 'b' : 'a';
-const ROOM_RE = /^[A-Za-z0-9_-]{12,40}$/;
-const DB_RE = /^https:\/\/[A-Za-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)\/?$/;
-function newRoom(){
-  const abc='abcdefghijkmnpqrstuvwxyz23456789', a=new Uint8Array(20);
-  crypto.getRandomValues(a); return Array.from(a,x=>abc[x%abc.length]).join('');
-}
-const loadScript = src => new Promise((ok,ko)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=ko; document.head.appendChild(s) });
-
-/* Config de Firebase: solo se aceptan textos conocidos */
-function cleanConfig(o, dbUrl){
-  const keys=['apiKey','authDomain','databaseURL','projectId','storageBucket','messagingSenderId','appId'];
-  const c={}; keys.forEach(k=>{ if(o && typeof o[k]==='string') c[k]=o[k].trim() });
-  if(dbUrl) c.databaseURL=dbUrl.trim();
-  if(c.databaseURL) c.databaseURL=c.databaseURL.replace(/\/$/,'');
-  if(!c.apiKey) throw new Error('No encontré el "apiKey". Pega el bloque firebaseConfig completo.');
-  if(!DB_RE.test(c.databaseURL||'')) throw new Error('Falta la URL de Realtime Database (algo como https://xxxx-default-rtdb.firebaseio.com). Cópiala desde Firebase → Realtime Database.');
-  return c;
-}
-function parseConfig(txt, dbUrl){
-  let o={};
-  const i=txt.indexOf('{'), j=txt.lastIndexOf('}');
-  if(i>=0 && j>i){
-    let s=txt.slice(i,j+1).replace(/^\s*\/\/.*$/gm,'');
-    s=s.replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g,'$1"$2":').replace(/'/g,'"').replace(/,\s*}/g,'}');
-    try{ o=JSON.parse(s) }catch(e){ throw new Error('No pude leer la configuración. Copia el bloque tal cual sale en Firebase.') }
-  } else if(!dbUrl) throw new Error('Pega el bloque firebaseConfig que te da Firebase.');
-  return cleanConfig(o, dbUrl);
-}
-
-/* ---------------- Link de invitación (#join=...) ---------------- */
-const b64e = o => btoa(unescape(encodeURIComponent(JSON.stringify(o))));
-const b64d = s => JSON.parse(decodeURIComponent(escape(atob(s))));
-let joinedNow = false;
-(function readInvite(){
-  const m = location.hash.match(/join=([^&]+)/); if(!m) return;
-  try{
-    const d=b64d(decodeURIComponent(m[1]));
-    const c=cleanConfig(d.c);
-    if(ROOM_RE.test(d.r)){
-      local.fb=c; local.room=d.r;
-      if(d.u==='a'||d.u==='b') local.me=d.u;
-      saveLocal(); joinedNow=true;
-    }
-  }catch(e){ console.warn('Link de invitación inválido', e) }
-  history.replaceState(null,'',location.pathname+location.search);
-})();
-function inviteLink(){
-  return location.origin+location.pathname+'#join='+encodeURIComponent(b64e({c:local.fb, r:local.room, u:other()}));
-}
-
-/* ---------------- Backend: modo prueba (local) ---------------- */
-function loadLocalData(){
-  try{
-    const d=JSON.parse(localStorage.getItem(DATA_KEY));
-    if(d){
-      if(d.users) state.users=d.users;
-      state.since=d.since||''; state.theme=d.theme||''; state.messages=d.messages||[];
-      if(d.seenHelp && !local.seenHelp){ local.seenHelp=true; saveLocal() }
-    }
-  }catch(e){}
-}
-const LocalBackend = {
-  name:'local', online:false, typing:{}, presence:{},
-  start(){ loadLocalData(); render(true) },
-  save(){ try{ localStorage.setItem(DATA_KEY, JSON.stringify({users:state.users,since:state.since,theme:state.theme,messages:state.messages})) }catch(e){} },
-  addMessage(m){ m.id=uid(); state.messages.push(m); this.save(); render(true) },
-  setReaction(id,who,r){ const m=state.messages.find(x=>x.id===id); if(!m) return; m.reactions=m.reactions||{}; if(r) m.reactions[who]=r; else delete m.reactions[who]; this.save(); renderMessages(false) },
-  deleteMessage(id){ state.messages=state.messages.filter(x=>x.id!==id); this.save(); render(false) },
-  saveSettings(s){ Object.assign(state,s); this.save(); render(false) },
-  clearAll(){ state.messages=[]; this.save(); render() },
-  setTyping(){}, setMe(){}
-};
-
-/* ---------------- Backend: en línea (Firebase) ---------------- */
-const FireBackend = {
-  name:'firebase', online:false, typing:{}, presence:{}, ref:null, ids:null, error:'',
-  async start(){
-    loadLocalData(); state.messages=[]; render(true);
-    try{
-      await loadScript(FB_SDK+'/firebase-app-compat.js');
-      await loadScript(FB_SDK+'/firebase-database-compat.js');
-    }catch(e){ return this.fail('No se pudo cargar Firebase. Revisa tu internet.') }
-    try{
-      const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(local.fb);
-      this.db = firebase.database(app);
-      this.TS = firebase.database.ServerValue.TIMESTAMP;
-      this.ref = this.db.ref('rooms/'+local.room);
-    }catch(e){ return this.fail('La configuración de Firebase no es válida: '+e.message) }
-
-    let firstSettings=true;
-    this.ref.child('settings').on('value', s=>{
-      const v=s.val();
-      if(v){ if(v.users) state.users=v.users; state.since=v.since||''; state.theme=v.theme||'' }
-      else if(firstSettings){ this.saveSettings({users:state.users,since:state.since,theme:state.theme}) }
-      firstSettings=false; render(false);
-    }, e=>this.fail(e));
-
-    this.ref.child('messages').orderByKey().limitToLast(500).on('value', s=>{
-      const list=[]; s.forEach(c=>{ const v=c.val(); if(v && typeof v.text==='string') list.push(Object.assign({id:c.key},v)) });
-      const first=this.ids===null, prev=this.ids||new Set();
-      const fresh=list.filter(m=>!prev.has(m.id));
-      this.ids=new Set(list.map(m=>m.id));
-      state.messages=list;
-      render(first || fresh.length>0);
-      if(!first) fresh.filter(m=>m.from!==local.me).forEach(m=>{
-        notifyNew(m);
-        if(!document.hidden && LOVE_TRIGGERS.some(e=>m.text.includes(e))) heartRain(m.text);
-      });
-    }, e=>this.fail(e));
-
-    this.ref.child('typing').on('value', s=>{ this.typing=s.val()||{}; updateTyping() });
-    this.ref.child('presence').on('value', s=>{ this.presence=s.val()||{}; updateSubtitle() });
-    this.db.ref('.info/connected').on('value', s=>{
-      this.online=!!s.val(); if(this.online) this.goOnline(); updateSubtitle();
-    });
-  },
-  fail(e){
-    const msg = typeof e==='string' ? e :
-      (String(e&&e.code||e).includes('permission') ? 'Firebase rechazó el acceso. Revisa que pegaste las reglas del README.' : 'Error de conexión: '+(e&&e.message||e));
-    this.error=msg; console.error(e); updateSubtitle();
-  },
-  goOnline(){
-    const p=this.ref.child('presence/'+local.me);
-    p.onDisconnect().set({online:false,last:this.TS});
-    p.set({online:true,last:this.TS});
-    this.ref.child('typing/'+local.me).onDisconnect().remove();
-  },
-  setMe(prev){
-    if(!this.ref) return;
-    const p=this.ref.child('presence/'+prev);
-    p.onDisconnect().cancel(); p.set({online:false,last:this.TS});
-    this.ref.child('typing/'+prev).remove();
-    if(this.online) this.goOnline();
-  },
-  addMessage(m){ m.ts=this.TS; this.ref.child('messages').push(m).catch(e=>this.fail(e)) },
-  setReaction(id,who,r){ this.ref.child(`messages/${id}/reactions/${who}`).set(r||null).catch(e=>this.fail(e)) },
-  deleteMessage(id){ this.ref.child('messages/'+id).remove().catch(e=>this.fail(e)) },
-  saveSettings(s){ this.ref.child('settings').set(s).catch(e=>this.fail(e)) },
-  clearAll(){ this.ref.child('messages').remove().catch(e=>this.fail(e)) },
-  setTyping(on){ if(this.ref) this.ref.child('typing/'+local.me).set(on?true:null) }
-};
-
-const backend = (local.fb && local.room) ? FireBackend : LocalBackend;
-
 /* ---------------- Render ---------------- */
 function renderHeader(){
   const {a,b}=state.users;
   $('#avA').textContent=a.avatar; $('#avB').textContent=b.avatar;
   $('#title').textContent=`${a.name} & ${b.name} 💕`;
   if(!$('#settingsModal').classList.contains('on')) document.body.className=state.theme||'';
-  $('#whoLabel').textContent = backend===FireBackend ? 'En este teléfono soy:' : 'Escribiendo como:';
+  $('#whoLabel').textContent = local.room ? 'En este teléfono soy:' : 'Escribiendo como:';
   document.querySelectorAll('#seg button').forEach(btn=>{
     const u=userOf(btn.dataset.u);
     btn.textContent=u.avatar+' '+u.name;
@@ -482,18 +584,17 @@ function renderHeader(){
   $('#msgCount').textContent=`${state.messages.length} mensaje${state.messages.length===1?'':'s'}`;
   updateSubtitle();
 }
-
 function updateSubtitle(){
   const sub=$('#subtitle'), o=userOf(other());
-  if(backend===LocalBackend){ sub.textContent=`modo prueba · toca 🔗 para conectar`; return }
-  if(backend.error){ sub.textContent='⚠️ '+backend.error; return }
-  if(!backend.online){ sub.textContent='conectando…'; return }
-  const p=backend.presence[other()];
-  if(p && p.online) sub.textContent=`${o.name} está en línea 🟢`;
-  else if(p && p.last) sub.textContent=`${o.name} · últ. vez ${fmtDay(p.last).toLowerCase()} ${fmtTime(p.last)}`;
-  else sub.textContent=`esperando a que ${o.name} se una…`;
+  if(!local.room){ sub.textContent='modo prueba · toca 🔗 para conectar'; return }
+  if(Relay.error){ sub.textContent='⚠️ '+Relay.error; return }
+  if(!Relay.connected){ sub.textContent='conectando…'; return }
+  if(Relay.partnerOnline){ sub.textContent=`${o.name} está en línea 🟢`; return }
+  const p=state.partnerLast;
+  sub.textContent = p ? `${o.name} no tiene el chat abierto · últ. vez ${fmtDay(p).toLowerCase()} ${fmtTime(p)}`
+                      : `esperando a que ${o.name} abra el chat…`;
 }
-function updateTyping(){ $('#typing').classList.toggle('on', !!(backend.typing && backend.typing[other()])) }
+function updateTyping(){ $('#typing').classList.toggle('on', !!Relay.typing) }
 
 function renderMessages(scroll=true){
   const box=$('#messages'), prevTop=box.scrollTop;
@@ -503,17 +604,17 @@ function renderMessages(scroll=true){
   }
   let html='', lastDay='';
   for(const m of state.messages){
-    const ts=m.ts||Date.now();
-    const day=fmtDay(ts);
+    const day=fmtDay(m.ts);
     if(day!==lastDay){ html+=`<div class="day-sep">${day}</div>`; lastDay=day }
     const side=m.from===local.me?'me':'them';
     const big=onlyEmoji(m.text);
     const rep=m.replyTo? state.messages.find(x=>x.id===m.replyTo):null;
     const reacts=Object.values(m.reactions||{});
+    const tick = !local.room ? ' ✓✓' : (m.got ? ' <span title="Recibido">✓✓</span>' : ' <span title="Llegará cuando tu pareja abra el chat">✓</span>');
     html+=`<div class="row ${side}" data-id="${esc(m.id)}">
       <div class="bubble ${big?'big':''}">${rep?`<div class="reply-quote">${esc(userOf(rep.from).name)}: ${esc(rep.text.slice(0,50))}</div>`:''}${esc(m.text)}</div>
       ${reacts.length?`<div class="reactions">${reacts.map(r=>`<span>${esc(r)}</span>`).join('')}</div>`:''}
-      <div class="meta">${side==='them'?userOf(m.from).avatar+' ':''}${fmtTime(ts)}${side==='me'?' ✓✓':''}</div>
+      <div class="meta">${side==='them'?esc(userOf(m.from).avatar)+' ':''}${fmtTime(m.ts)}${side==='me'?tick:''}</div>
     </div>`;
   }
   box.innerHTML=html;
@@ -533,16 +634,14 @@ function notifyNew(m){
 }
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ unread=0; document.title=baseTitle } });
 function askNotify(){
-  if(backend===FireBackend && 'Notification' in window && Notification.permission==='default'){
-    try{ Notification.requestPermission() }catch(e){}
-  }
+  if(local.room && 'Notification' in window && Notification.permission==='default'){ try{ Notification.requestPermission() }catch(e){} }
 }
 
 /* ---------------- Enviar ---------------- */
 function send(text){
   text=text.trim().slice(0,2000); if(!text) return;
-  const m={from:local.me,text,ts:Date.now()}; if(replyTo) m.replyTo=replyTo;
-  backend.addMessage(m);
+  const m={from:local.me, text, ts:Date.now()}; if(replyTo) m.replyTo=replyTo;
+  Chat.addMessage(m);
   replyTo=null; $('#replyBar').classList.remove('on');
   stopTyping();
   if(LOVE_TRIGGERS.some(e=>text.includes(e))) heartRain(text);
@@ -564,17 +663,16 @@ function heartRain(text){
 /* ---------------- Composer ---------------- */
 const input=$('#input');
 let typingOn=false, typingTimer=null;
-function stopTyping(){ clearTimeout(typingTimer); if(typingOn){ typingOn=false; backend.setTyping(false) } }
+function stopTyping(){ clearTimeout(typingTimer); if(typingOn){ typingOn=false; Chat.setTyping(false) } }
 input.addEventListener('input',()=>{
   input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,110)+'px';
   if(!input.value.trim()) return stopTyping();
-  if(!typingOn){ typingOn=true; backend.setTyping(true) }
+  if(!typingOn){ typingOn=true; Chat.setTyping(true) }
   clearTimeout(typingTimer); typingTimer=setTimeout(stopTyping,3000);
 });
 input.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); $('#sendBtn').click() } });
 $('#sendBtn').onclick=()=>{ send(input.value); input.value=''; input.style.height='auto'; input.focus() };
 
-/* ---------------- Frases rápidas ---------------- */
 $('#quick').innerHTML=QUICK.map(q=>`<button class="chip">${q}</button>`).join('');
 $('#quick').onclick=e=>{ if(e.target.classList.contains('chip')) send(e.target.textContent) };
 
@@ -598,9 +696,7 @@ $('#emojiBtn').onclick=()=>$('#emojiPanel').classList.toggle('on');
 /* ---------------- Quién soy ---------------- */
 $('#seg').onclick=e=>{
   const b=e.target.closest('button'); if(!b || b.dataset.u===local.me) return;
-  const prev=local.me; stopTyping();
-  local.me=b.dataset.u; saveLocal();
-  backend.setMe(prev); render(false); updateTyping();
+  stopTyping(); local.me=b.dataset.u; saveLocal(); render(false);
 };
 
 /* ---------------- Reacciones / acciones ---------------- */
@@ -626,8 +722,7 @@ function hidePop(){ pop.classList.remove('on'); popTarget=null }
 document.addEventListener('click',e=>{ if(!pop.contains(e.target)) hidePop() });
 function toggleReact(id,r){
   const m=state.messages.find(x=>x.id===id); if(!m) return;
-  const cur=(m.reactions||{})[local.me];
-  backend.setReaction(id, local.me, cur===r ? null : r);
+  Chat.setReaction(id, (m.reactions||{})[local.me]===r ? null : r);
 }
 pop.onclick=e=>{
   const b=e.target.closest('button'); if(!b||!popTarget) return;
@@ -635,7 +730,7 @@ pop.onclick=e=>{
   if(b.dataset.r) toggleReact(popTarget,b.dataset.r);
   else if(b.dataset.a==='reply'){ replyTo=m.id; $('#replyText').textContent=`↩️ Respondiendo a: ${m.text.slice(0,40)}`; $('#replyBar').classList.add('on'); input.focus() }
   else if(b.dataset.a==='copy'){ navigator.clipboard?.writeText(m.text) }
-  else if(b.dataset.a==='del'){ if(confirm('¿Borrar este mensaje? Se borrará para los dos.')) backend.deleteMessage(m.id) }
+  else if(b.dataset.a==='del'){ if(confirm('¿Borrar este mensaje? Se borrará para los dos.')) Chat.deleteMessage(m.id) }
   hidePop();
 };
 $('#cancelReply').onclick=()=>{ replyTo=null; $('#replyBar').classList.remove('on') };
@@ -660,7 +755,7 @@ $('#themes').onclick=e=>{
 };
 $('#saveSettings').onclick=()=>{
   $('#settingsModal').classList.remove('on');
-  backend.saveSettings({
+  Chat.saveSettings({
     users:{
       a:{name:$('#nameA').value.trim()||'Yo',avatar:tmp.avA},
       b:{name:$('#nameB').value.trim()||'Mi amor',avatar:tmp.avB}
@@ -668,34 +763,35 @@ $('#saveSettings').onclick=()=>{
     since:$('#since').value, theme:tmp.theme
   });
 };
-$('#clearChat').onclick=()=>{ if(confirm('¿Seguro? Se borrarán todos los mensajes para los dos 🥺')){ backend.clearAll(); $('#settingsModal').classList.remove('on') } };
+$('#clearChat').onclick=()=>{ if(confirm('¿Seguro? Se borrarán todos los mensajes para los dos 🥺')){ Chat.clearAll(); $('#settingsModal').classList.remove('on') } };
 
-/* ---------------- Conexión en línea ---------------- */
+/* ---------------- Conectar con mi pareja ---------------- */
 function openConnect(){
   const st=$('#connStatus');
-  if(backend===FireBackend){
-    st.className='status '+(backend.error?'err':'ok');
-    st.textContent = backend.error ? '⚠️ '+backend.error : '✅ Conectado. Envíale este link a tu pareja para que entre al mismo chat (ábrelo en su teléfono).';
+  if(local.room){
+    st.className='status ok';
+    st.textContent='✅ Chat creado. Mándale este link a tu pareja: al abrirlo quedan conectados. Los mensajes llegan al instante cuando los dos tienen el chat abierto.';
     $('#connForm').style.display='none'; $('#inviteBox').style.display='block';
     $('#inviteLink').value=inviteLink();
   } else {
     st.className='status';
     st.textContent='Ahora estás en modo prueba: los mensajes solo quedan en este teléfono.';
     $('#connForm').style.display='block'; $('#inviteBox').style.display='none';
-    if(!$('#roomCode').value) $('#roomCode').value=newRoom();
   }
   $('#connectModal').classList.add('on');
 }
+function enterRoom(secret, me){
+  if(state.messages.length && !confirm('Los mensajes de prueba de este teléfono se borrarán. ¿Seguir?')) return;
+  state.messages=[]; state.deleted=[]; state.clearedAt=0; state.sv=Date.now(); persist();
+  local.room=secret; local.me=me; local.showInvite=(me==='a'); saveLocal();
+  location.reload();
+}
 $('#connectOpen').onclick=openConnect;
-$('#connectBtn').onclick=()=>{
-  const st=$('#connStatus');
-  try{
-    const cfg=parseConfig($('#fbConfig').value, $('#dbUrl').value);
-    const room=$('#roomCode').value.trim();
-    if(!ROOM_RE.test(room)) throw new Error('El código de sala debe tener entre 12 y 40 letras o números (sin espacios).');
-    local.fb=cfg; local.room=room; local.me=local.me||'a'; saveLocal();
-    location.reload();
-  }catch(e){ st.className='status err'; st.textContent='⚠️ '+e.message }
+$('#createRoom').onclick=()=>enterRoom(newSecret(),'a');
+$('#joinRoom').onclick=()=>{
+  const s=extractSecret($('#joinCode').value);
+  if(!s){ const st=$('#connStatus'); st.className='status err'; st.textContent='⚠️ Ese link o código no es válido. Copia el link completo que te mandaron.'; return }
+  enterRoom(s, ($('#joinCode').value.match(/[&#]u=([ab])/)||[])[1]||'b');
 };
 $('#shareInvite').onclick=async()=>{
   const url=inviteLink();
@@ -705,8 +801,11 @@ $('#shareInvite').onclick=async()=>{
 };
 $('#inviteLink').onclick=e=>e.target.select();
 $('#disconnectBtn').onclick=()=>{
-  if(!confirm('¿Desconectar este teléfono? Los mensajes siguen guardados en línea; puedes volver a entrar con el link.')) return;
-  local.fb=null; local.room=''; saveLocal(); location.reload();
+  if(!confirm('¿Salir del chat en este teléfono? Se borrará el historial guardado aquí (tu pareja conserva el suyo). Podrás volver con el link.')) return;
+  Relay.send({t:'bye'});
+  local.room=''; saveLocal();
+  state.messages=[]; state.deleted=[]; state.clearedAt=0; persist();
+  setTimeout(()=>location.reload(),300);
 };
 
 /* ---------------- Ayuda ---------------- */
@@ -715,8 +814,10 @@ $('#closeHelp').onclick=()=>{ $('#helpModal').classList.remove('on'); local.seen
 document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{ if(e.target===bg){ bg.classList.remove('on'); document.body.className=state.theme||'' } }));
 
 /* ---------------- Inicio ---------------- */
-backend.start();
-if(joinedNow){ local.seenHelp=true; saveLocal(); setTimeout(()=>alert('¡Listo! 💕 Ya estás en el chat.\nRevisa abajo en "Soy" que esté marcado tu nombre.'),800) }
+render(true);
+Relay.start();
+if(joinedNow) setTimeout(()=>alert('¡Listo! 💕 Ya estás en el chat.\nRevisa abajo en "Soy" que esté marcado tu nombre.'),600);
+else if(local.showInvite){ local.showInvite=false; saveLocal(); setTimeout(openConnect,300) }
 else if(!local.seenHelp) setTimeout(()=>$('#helpBtn').click(),500);
 </script>
 </body>
