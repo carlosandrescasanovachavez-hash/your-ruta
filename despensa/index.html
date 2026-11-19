@@ -234,53 +234,6 @@ details.how[open] > summary{display:none}
 
 @media (max-width:380px){.grid2{grid-template-columns:1fr}.stats .v{font-size:20px}}
 @media (prefers-reduced-motion:reduce){.laser{animation:none}.sheet{animation:none}}
-/* Reporte PDF (solo se ve al imprimir / guardar como PDF) */
-#report{display:none}
-.rp{font:12px/1.45 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#16201C;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.rp *{box-sizing:border-box}
-.rp h1{font:800 26px/1.1 "Bricolage Grotesque",Inter,system-ui,sans-serif;margin:0;letter-spacing:-.01em;color:#fff}
-.rp h2{font:800 16px/1.2 "Bricolage Grotesque",Inter,system-ui,sans-serif;margin:22px 0 4px;color:#0B7A5E;break-after:avoid;display:flex;gap:8px;align-items:center}
-.rp h2 i{font-style:normal;background:#0B7A5E;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-grid;place-items:center;font:700 12px Inter,sans-serif}
-.rp .lead{margin:0 0 10px;color:#5A6A62;font-size:11.5px;break-after:avoid}
-.rp .hero{background:linear-gradient(135deg,#0B7A5E,#14A37F);color:#fff;border-radius:14px;padding:18px 20px;display:flex;justify-content:space-between;gap:16px;align-items:flex-end}
-.rp .hero small{display:block;opacity:.9;font-size:12px;margin-top:6px}
-.rp .hero .d{text-align:right;font-size:11.5px;opacity:.95;white-space:nowrap}
-.rp .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
-.rp .card{border:1px solid #D3DCD4;border-radius:10px;padding:10px 12px;border-left-width:5px;break-inside:avoid}
-.rp .card b{display:block;font:800 22px/1.1 "Bricolage Grotesque",Inter,sans-serif;font-variant-numeric:tabular-nums}
-.rp .card span{color:#5A6A62;font-size:11px}
-.rp .card.g{border-left-color:#1D7F47}.rp .card.o{border-left-color:#C2410C}.rp .card.w{border-left-color:#A86A12}.rp .card.r{border-left-color:#B8322A}.rp .card.b{border-left-color:#3B5BA9}.rp .card.t{border-left-color:#0B7A5E}
-.rp .howto{background:#D5EDE4;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:11.5px;break-inside:avoid}
-.rp .howto b{color:#0B7A5E}
-.rp .howto ul{margin:4px 0 0;padding-left:18px}
-.rp .pill{display:inline-block;font-weight:700;font-size:10px;padding:2px 8px;border-radius:99px;white-space:nowrap}
-.rp .pill.ok{background:#D9F0E2;color:#14602F}.rp .pill.low{background:#FBE9C8;color:#7A4A06}.rp .pill.out{background:#F8D9D6;color:#8F241E}
-.rp table{width:100%;border-collapse:collapse;margin-top:6px}
-.rp thead{display:table-header-group}
-.rp th{background:#0B7A5E;color:#fff;text-align:left;font-size:10.5px;padding:6px 8px;font-weight:700}
-.rp td{padding:6px 8px;border-bottom:1px solid #E6ECE6;vertical-align:middle}
-.rp tr{break-inside:avoid}
-.rp tbody tr:nth-child(even) td{background:#F6F9F6}
-.rp td.n,.rp th.n{text-align:right;font-variant-numeric:tabular-nums}
-.rp td small{display:block;color:#5A6A62;font-size:10px}
-.rp .bar{height:7px;border-radius:4px;background:#E6ECE6;min-width:60px;overflow:hidden}
-.rp .bar i{display:block;height:100%;border-radius:4px}
-.rp .hb{display:grid;grid-template-columns:150px 1fr 40px;gap:8px;align-items:center;margin:5px 0;break-inside:avoid}
-.rp .hb .bar{height:12px}
-.rp .hb b{text-align:right;font-variant-numeric:tabular-nums}
-.rp .hb span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rp .empty{padding:14px;border:1px dashed #D3DCD4;border-radius:10px;color:#5A6A62;text-align:center;margin-top:6px}
-.rp .chart{width:100%;height:auto;display:block;margin-top:6px;break-inside:avoid}
-.rp .rnote{display:block;background:#FBE9C8;border-radius:10px;padding:8px 12px;margin-top:10px;font-size:11px;color:#7A4A06}
-.rp .gl{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;margin-top:6px;font-size:11px}
-.rp .gl div{break-inside:avoid}
-.rp .foot{margin-top:22px;padding-top:8px;border-top:1px solid #D3DCD4;color:#5A6A62;font-size:10px;display:flex;justify-content:space-between}
-@page{size:A4;margin:12mm}
-@media print{
-  html,body{background:#fff!important}
-  body>*:not(#report){display:none!important}
-  #report{display:block!important;padding:0!important;margin:0!important}
-}
 </style>
 </head>
 <body>
@@ -393,13 +346,16 @@ details.how[open] > summary{display:none}
     <div style="display:grid;gap:16px">
       <div class="panel" id="repPanel">
         <div class="eyebrow">Reporte</div>
-        <div style="display:grid;gap:4px"><b>Reporte en PDF</b>
-        <span class="muted" style="font-size:13.5px">Resumen con gráficos, stock de cada producto, lista para comprar y detalle de salidas. Ideal para revisar el negocio o enviarlo por WhatsApp.</span></div>
+        <div style="display:grid;gap:4px"><b>Reporte en Excel</b>
+        <span class="muted" style="font-size:13.5px">Un archivo con 6 hojas: resumen, stock de cada producto, lista para comprar, salidas, todos los movimientos y movimiento por día. Con colores, filtros y totales. Ábrelo en Excel o Google Sheets.</span></div>
         <div class="tools" style="grid-template-columns:1fr auto">
           <select id="repRange" aria-label="Período del reporte"><option value="7">Últimos 7 días</option><option value="30" selected>Últimos 30 días</option><option value="90">Últimos 90 días</option><option value="0">Todo el historial</option></select>
-          <button class="btn primary" type="button" id="repGo">Crear PDF</button>
+          <button class="btn primary" type="button" id="repGo">Descargar Excel</button>
         </div>
-        <span class="muted" style="font-size:12.5px">Se abre la ventana de impresión: elige <b>“Guardar como PDF”</b> como impresora y toca el botón de descargar.</span>
+        <div class="row wrapy" style="justify-content:space-between">
+          <span class="muted" style="font-size:12.5px">¿Empezar de cero? Puedes descargar el Excel y borrar todo.</span>
+          <button class="btn danger sm" type="button" id="wipe">Borrar todo</button>
+        </div>
       </div>
 
       <div class="panel" id="cloudPanel"></div>
@@ -431,7 +387,6 @@ details.how[open] > summary{display:none}
         </ol>
       </details>
 
-      <button class="btn danger sm" type="button" id="wipe" style="justify-self:start">Borrar todo el inventario</button>
     </div>
   </section>
 
@@ -458,7 +413,6 @@ details.how[open] > summary{display:none}
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
 <div id="fileScan" hidden></div>
-<div id="report" aria-hidden="true"></div>
 
 <script type="text/plain" id="gsCode">
 /**
@@ -1256,8 +1210,68 @@ $('#cloudPanel').addEventListener('click',async e=>{
 $('#cloudPanel').addEventListener('submit',e=>{if(e.target.id==='cloudForm'){e.preventDefault();connect($('#cloudUrl').value,setupKey());}});
 $('#cloudPanel').addEventListener('change',e=>{if(e.target.id==='whoIn'){UI.who=e.target.value.trim().slice(0,30);saveUI();toast(UI.who?'Nombre guardado':'Nombre borrado');}});
 
-/* ---------- Reporte PDF ---------- */
-function buildReport(range){
+/* ---------- Reporte Excel ---------- */
+const XL_SRC='https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+function loadExcelJS(){
+  if(window.ExcelJS)return Promise.resolve();
+  return new Promise((ok,ko)=>{const s=document.createElement('script');s.src=XL_SRC;s.onload=()=>window.ExcelJS?ok():ko(new Error('x'));
+    s.onerror=()=>{s.remove();ko(new Error('No se pudo cargar el generador de Excel. Revisa tu conexión a internet e intenta de nuevo.'));};document.head.appendChild(s);});
+}
+const XC={g:'FF0B7A5E',g2:'FF14A37F',gl:'FFD5EDE4',ink:'FF16201C',mut:'FF5A6A62',line:'FFD3DCD4',zebra:'FFF6F9F6',white:'FFFFFFFF',
+  in:'FF1D7F47',inl:'FFD9F0E2',out:'FFC2410C',outl:'FFFDE3D3',set:'FF3B5BA9',setl:'FFE1E8F8',warn:'FFA86A12',warnl:'FFFBE9C8',red:'FFB8322A',redl:'FFF8D9D6'};
+const XST={ok:{t:'Disponible',c:XC.in,f:XC.inl},low:{t:'Por agotarse',c:XC.warn,f:XC.warnl},out:{t:'Agotado',c:XC.red,f:XC.redl}};
+const XK={in:{t:'Entrada',c:XC.in,f:XC.inl},out:{t:'Salida',c:XC.out,f:XC.outl},set:{t:'Conteo',c:XC.set,f:XC.setl}};
+const xfill=c=>({type:'pattern',pattern:'solid',fgColor:{argb:c}});
+const xb=c=>({style:'thin',color:{argb:c||XC.line}});
+const xdate=ts=>{const d=new Date(ts);return new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));};
+const xtime=ts=>new Date(ts).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',hour12:false});
+const xnum=n=>Math.round(n*100)/100;
+
+function xTitle(ws,cols,title,sub){
+  ws.mergeCells(1,1,1,cols);ws.mergeCells(2,1,2,cols);
+  const a=ws.getCell(1,1);a.value=title;a.font={bold:true,size:18,color:{argb:XC.white}};a.fill=xfill(XC.g);a.alignment={vertical:'middle',indent:1};
+  const b=ws.getCell(2,1);b.value=sub;b.font={size:10,color:{argb:XC.white}};b.fill=xfill(XC.g2);b.alignment={vertical:'middle',indent:1,wrapText:true};
+  ws.getRow(1).height=34;ws.getRow(2).height=22;
+}
+function xSection(ws,r,cols,text,help){
+  ws.mergeCells(r,1,r,cols);const c=ws.getCell(r,1);c.value=text;c.font={bold:true,size:13,color:{argb:XC.g}};
+  c.border={bottom:{style:'medium',color:{argb:XC.g}}};ws.getRow(r).height=22;
+  if(help){ws.mergeCells(r+1,1,r+1,cols);const h=ws.getCell(r+1,1);h.value=help;h.font={italic:true,size:9.5,color:{argb:XC.mut}};h.alignment={wrapText:true,vertical:'top'};ws.getRow(r+1).height=help.length>110?28:16;return r+2;}
+  return r+1;
+}
+/* tabla con encabezado verde, filas cebra, bordes; devuelve la última fila */
+function xTable(ws,r,cols,rows,{filter=false,total=null}={}){
+  const hr=ws.getRow(r);
+  cols.forEach((c,i)=>{const x=hr.getCell(i+1);x.value=c.h;x.font={bold:true,color:{argb:XC.white},size:10.5};x.fill=xfill(XC.g);
+    x.alignment={vertical:'middle',horizontal:c.align||'left',wrapText:true};x.border={top:xb(XC.g),bottom:xb(XC.g),left:xb(XC.g),right:xb(XC.g)};});
+  hr.height=24;
+  rows.forEach((row,k)=>{
+    const rr=ws.getRow(r+1+k);
+    cols.forEach((c,i)=>{const x=rr.getCell(i+1);const v=row[i];
+      x.value=v&&typeof v==='object'&&!(v instanceof Date)&&('v' in v)?v.v:v;
+      if(c.fmt)x.numFmt=c.fmt;
+      x.alignment={vertical:'middle',horizontal:c.align||'left',wrapText:!!c.wrap};
+      x.border={bottom:xb(),left:xb(),right:xb()};
+      if(k%2)x.fill=xfill(XC.zebra);
+      if(v&&typeof v==='object'&&('v' in v)){if(v.fill)x.fill=xfill(v.fill);if(v.font)x.font=v.font;}
+      else if(c.font)x.font=c.font;
+    });
+    rr.height=18;
+  });
+  let end=r+rows.length;
+  if(filter&&rows.length)ws.autoFilter={from:{row:r,column:1},to:{row:end,column:cols.length}};
+  if(total&&rows.length){
+    end++;const tr=ws.getRow(end);
+    cols.forEach((c,i)=>{const x=tr.getCell(i+1);x.fill=xfill(XC.gl);x.font={bold:true,color:{argb:XC.ink}};x.border={top:{style:'medium',color:{argb:XC.g}},bottom:xb(XC.g)};x.alignment={vertical:'middle',horizontal:c.align||'left'};});
+    tr.getCell(1).value=total.label;
+    for(const [ci,res] of total.sums){const L=ws.getColumn(ci).letter;tr.getCell(ci).value={formula:`SUBTOTAL(9,${L}${r+1}:${L}${end-1})`,result:res};}
+    tr.height=22;
+  }
+  return end;
+}
+function xBar(v,max,len=24){return '█'.repeat(Math.max(0,Math.round((max>0?v/max:0)*len)));}
+
+async function buildExcel(range){
   const D=864e5,t0=new Date();t0.setHours(0,0,0,0);
   const real=S.moves.filter(m=>S.products[m.code]);
   const first=real.length?Math.min(...real.map(m=>m.ts)):t0.getTime();
@@ -1266,92 +1280,169 @@ function buildReport(range){
   const ms=real.filter(m=>m.ts>=from);
   const st=stocks(),codes=Object.keys(S.products);
   const rank={out:0,low:1,ok:2};
-  const rows=codes.map(c=>({p:S.products[c],s:st[c],k:status(S.products[c],st[c])}))
+  const rows=codes.map(c=>({p:S.products[c],s:xnum(st[c]||0),k:status(S.products[c],st[c])}))
     .sort((a,b)=>rank[a.k]-rank[b.k]||a.p.name.localeCompare(b.p.name,'es'));
   const outs=ms.filter(m=>m.kind==='out'),ins=ms.filter(m=>m.kind==='in');
-  const sum=a=>a.reduce((x,m)=>x+Math.abs(m.d),0);
-  const units=codes.reduce((a,c)=>a+Math.max(0,st[c]),0);
+  const sum=a=>xnum(a.reduce((x,m)=>x+Math.abs(m.d),0));
+  const units=xnum(codes.reduce((a,c)=>a+Math.max(0,st[c]||0),0));
   const nOut=rows.filter(r=>r.k==='out').length,nLow=rows.filter(r=>r.k==='low').length;
-  const dfmt=ts=>new Date(ts).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const tfmt=ts=>new Date(ts).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
-  const COL={ok:'#1D7F47',low:'#A86A12',out:'#B8322A'};
-  const PILL={ok:'Disponible',low:'Por agotarse',out:'Agotado'};
+  const days=Math.max(1,Math.round((t0.getTime()-from)/D)+1);
+  const now=new Date(),gen=now.toLocaleDateString('es-CL')+' '+xtime(now);
+  const sub=`${label} · Generado el ${gen}${UI.who?' · Por '+UI.who:''}`;
   const hasEx=codes.some(c=>S.products[c].ex);
 
-  /* gráfico: salidas por día (o por semana si el período es largo) */
-  const days=Math.max(1,Math.round((t0.getTime()-from)/D)+1),size=days>35?7:1,nb=Math.ceil(days/size);
-  const bins=Array(nb).fill(0);
-  for(const m of outs){const i=Math.min(nb-1,Math.floor((m.ts-from)/(D*size)));bins[i]+=Math.abs(m.d);}
-  const mx=Math.max(1,...bins),W=680,H=190,pl=30,pb=26,pt=16,bw=(W-pl)/nb;
-  let svg=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Salidas por ${size>1?'semana':'día'}">`;
-  for(let g=0;g<=3;g++){const y=pt+(H-pt-pb)*(1-g/3);svg+=`<line x1="${pl}" x2="${W}" y1="${y}" y2="${y}" stroke="#E6ECE6"/><text x="${pl-5}" y="${y+3}" text-anchor="end" font-size="9" fill="#5A6A62">${fmt(Math.round(mx*g/3*10)/10)}</text>`;}
-  const step=Math.ceil(nb/12);
-  bins.forEach((v,i)=>{
-    const h=(H-pt-pb)*v/mx,x=pl+i*bw+bw*.15,w=bw*.7,y=H-pb-h;
-    svg+=`<rect x="${x}" y="${y}" width="${w}" height="${Math.max(h,v?1:0)}" rx="3" fill="#C2410C"/>`;
-    if(v&&nb<=16)svg+=`<text x="${x+w/2}" y="${y-3}" text-anchor="middle" font-size="9" font-weight="700" fill="#16201C">${fmt(v)}</text>`;
-    if(i%step===0){const d=new Date(from+i*size*D);svg+=`<text x="${x+w/2}" y="${H-9}" text-anchor="middle" font-size="9" fill="#5A6A62">${size>1?d.getDate()+'/'+(d.getMonth()+1):d.getDate()+'/'+(d.getMonth()+1)}</text>`;}
+  const wb=new ExcelJS.Workbook();wb.creator='Mi Despensa';wb.created=now;
+  const setup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.4,right:.4,top:.5,bottom:.5,header:.2,footer:.2}};
+
+  /* ===== 1. Resumen ===== */
+  const R=wb.addWorksheet('Resumen',{properties:{tabColor:{argb:XC.g}},views:[{showGridLines:false}],pageSetup:setup});
+  R.columns=[{width:30},{width:13},{width:13},{width:13},{width:13},{width:13}];
+  xTitle(R,6,'Mi Despensa · Reporte de inventario',sub);
+  let r=4;
+  if(hasEx){R.mergeCells(r,1,r,6);const n=R.getCell(r,1);n.value='Este archivo incluye datos de ejemplo. Bórralos en la app (Inventario → “Borrar ejemplos”) para ver solo tus cifras reales.';
+    n.fill=xfill(XC.warnl);n.font={size:10,color:{argb:XC.warn},bold:true};n.alignment={wrapText:true,vertical:'middle',indent:1};R.getRow(r).height=30;r+=2;}
+  r=xSection(R,r,6,'Resumen','Las cifras de entradas y salidas corresponden al período elegido. El stock es el de hoy.');
+  const cards=[
+    [codes.length,'Productos registrados',XC.g,XC.gl],[units,'Unidades en stock hoy',XC.in,XC.inl],[nOut+nLow,`Por reponer (${nOut} agotados, ${nLow} por agotarse)`,nOut+nLow?XC.warn:XC.in,nOut+nLow?XC.warnl:XC.inl],
+    [sum(ins),`Unidades que entraron (${ins.length} movimientos)`,XC.in,XC.inl],[sum(outs),`Unidades que salieron (${outs.length} movimientos)`,XC.out,XC.outl],[xnum(sum(outs)/days),'Salidas promedio por día',XC.set,XC.setl]];
+  cards.forEach(([v,l,c,f],i)=>{
+    const rr=r+Math.floor(i/3)*3,cc=1+(i%3)*2;
+    // la primera tarjeta de cada fila usa A:B (A es ancha), las otras C:D y E:F
+    R.mergeCells(rr,cc,rr,cc+1);R.mergeCells(rr+1,cc,rr+1,cc+1);
+    const a=R.getCell(rr,cc),b=R.getCell(rr+1,cc);
+    a.value=v;a.font={bold:true,size:22,color:{argb:c}};a.fill=xfill(f);a.alignment={vertical:'middle',horizontal:'left',indent:1};
+    b.value=l;b.font={size:9.5,color:{argb:XC.ink}};b.fill=xfill(f);b.alignment={vertical:'top',horizontal:'left',indent:1,wrapText:true};
+    for(const x of [a,b])x.border={left:{style:'thick',color:{argb:c}}};
+    R.getRow(rr).height=32;R.getRow(rr+1).height=28;
   });
-  svg+='</svg>';
-
-  /* top salidas y salidas por persona */
+  r+=6;
+  r=xSection(R,r,6,'Cómo leer este archivo');
+  const tips=[
+    ['Disponible','Hay stock sobre el mínimo. No hace falta comprar.',XST.ok],
+    ['Por agotarse','Queda el mínimo o menos. Conviene comprar pronto.',XST.low],
+    ['Agotado','No queda nada. Hay que reponer.',XST.out],
+    ['Mínimo','Cantidad de aviso que defines en la ficha de cada producto.',null],
+    ['Salida','Todo lo que se vendió, usó o consumió. Entrada: lo que llegó.',null],
+  ];
+  for(const [t,d,s] of tips){
+    const a=R.getCell(r,1);a.value=t;a.font={bold:true,color:{argb:s?s.c:XC.g}};a.fill=xfill(s?s.f:XC.gl);a.alignment={vertical:'middle',indent:1};
+    R.mergeCells(r,2,r,6);const b=R.getCell(r,2);b.value=d;b.alignment={vertical:'middle',wrapText:true};b.font={size:10};
+    a.border=b.border={bottom:xb()};R.getRow(r).height=20;r++;
+  }
+  r++;
+  r=xSection(R,r,6,'Productos que más salen','Los 8 con más unidades retiradas en el período. Son los que conviene tener siempre disponibles.');
   const byP={};for(const m of outs)byP[m.code]=(byP[m.code]||0)+Math.abs(m.d);
-  const top=Object.entries(byP).sort((a,b)=>b[1]-a[1]).slice(0,8),tmax=top.length?top[0][1]:1;
-  const users={};for(const m of ms){const u=m.by||'(sin nombre)';users[u]=users[u]||{i:0,o:0};if(m.kind==='in')users[u].i+=Math.abs(m.d);if(m.kind==='out')users[u].o+=Math.abs(m.d);}
-  const smax=Math.max(1,...rows.map(r=>Math.max(r.s,0)));
-  const buy=rows.filter(r=>r.k!=='ok');
+  const top=Object.entries(byP).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  if(top.length){
+    const tmax=top[0][1],hr=r;
+    r=xTable(R,r,[{h:'Producto'},{h:'Unidades',align:'right'},{h:'Comparación'},{h:''},{h:''},{h:''}],
+      top.map(([c,v])=>[pname(c),xnum(v),{v:xBar(v,tmax),font:{color:{argb:XC.out}}},'','','']));
+    R.mergeCells(hr,3,hr,6);
+    for(let i=hr+1;i<=r;i++){R.mergeCells(i,3,i,6);const L=i;R.getCell(i,3).value={formula:`REPT("█",ROUND(B${L}/MAX($B$${hr+1}:$B$${r})*24,0))`,result:xBar(R.getCell(i,2).value,tmax)};R.getCell(i,3).font={color:{argb:XC.out}};}
+  }else{R.mergeCells(r,1,r,6);R.getCell(r,1).value='Sin salidas en este período.';R.getCell(r,1).font={italic:true,color:{argb:XC.mut}};}
+  r+=2;
+  const users={};for(const m of ms){const u=m.by||'(sin nombre)';users[u]=users[u]||{i:0,o:0,n:0};users[u].n++;if(m.kind==='in')users[u].i+=Math.abs(m.d);if(m.kind==='out')users[u].o+=Math.abs(m.d);}
+  if(Object.keys(users).some(u=>u!=='(sin nombre)')){
+    r=xSection(R,r,6,'Movimientos por persona','Quién registró entradas y salidas. Cada persona escribe su nombre en la app (Historial → Nube).');
+    r=xTable(R,r,[{h:'Persona'},{h:'Movimientos',align:'right'},{h:'Entradas',align:'right'},{h:'Salidas',align:'right'}],
+      Object.entries(users).sort((a,b)=>b[1].o-a[1].o).map(([u,v])=>[u,v.n,xnum(v.i),xnum(v.o)]));
+    r+=2;
+  }
+  r=xSection(R,r,6,'Hojas de este archivo');
+  for(const [t,d] of [['Stock','Cada producto con su stock, mínimo y estado. Tiene filtros en el encabezado.'],['Comprar','Lo que está agotado o en su mínimo, con una columna para marcar lo comprado.'],['Salidas','Cada retiro del período con fecha, hora, cantidad y quién lo registró.'],['Movimientos','Todas las entradas, salidas y conteos del período, con el stock que quedó.'],['Por día','Unidades que entraron y salieron cada día, con una barra para comparar.']]){
+    const a=R.getCell(r,1);a.value=t;a.font={bold:true,color:{argb:XC.g},underline:true};a.value={text:t,hyperlink:`#'${t}'!A1`};
+    R.mergeCells(r,2,r,6);R.getCell(r,2).value=d;R.getCell(r,2).font={size:10};R.getCell(r,2).alignment={wrapText:true,vertical:'middle'};R.getRow(r).height=20;r++;
+  }
 
-  let n=0;const H2=(t,lead)=>`<h2><i>${++n}</i>${t}</h2><p class="lead">${lead}</p>`;
-  const html=`<div class="rp">
-  <div class="hero"><div><h1>Mi Despensa</h1><small>Reporte de inventario · ${esc(label)}</small></div>
-    <div class="d">Generado el ${dfmt(Date.now())}<br>${tfmt(Date.now())} h${UI.who?'<br>Por '+esc(UI.who):''}</div></div>
-  ${hasEx?'<div class="rnote">Este reporte incluye <b>datos de ejemplo</b>. Bórralos en Inventario → “Borrar ejemplos” para ver solo tus cifras reales.</div>':''}
-  <div class="cards">
-    <div class="card t"><b>${codes.length}</b><span>Productos registrados</span></div>
-    <div class="card g"><b>${fmt(units)}</b><span>Unidades en stock hoy</span></div>
-    <div class="card ${nOut+nLow?'w':'g'}"><b>${nOut+nLow}</b><span>Por reponer (${nOut} agotados, ${nLow} por agotarse)</span></div>
-    <div class="card g"><b>+${fmt(sum(ins))}</b><span>Unidades que entraron (${ins.length} movimientos)</span></div>
-    <div class="card o"><b>−${fmt(sum(outs))}</b><span>Unidades que salieron (${outs.length} movimientos)</span></div>
-    <div class="card b"><b>${outs.length?fmt(Math.round(sum(outs)/days*10)/10):'0'}</b><span>Salidas promedio por día</span></div>
-  </div>
-  <div class="howto"><b>Cómo leer este reporte</b><ul>
-    <li><b>Disponible</b>: hay stock sobre el mínimo. <b>Por agotarse</b>: queda el mínimo o menos, hay que comprar pronto. <b>Agotado</b>: no queda nada.</li>
-    <li>El <b>mínimo</b> es la cantidad de aviso que tú defines en la ficha de cada producto.</li>
-    <li>Una <b>salida</b> es todo lo que se vendió, usó o consumió. Las barras más altas del gráfico son los días de más movimiento.</li></ul></div>
+  /* ===== 2. Stock ===== */
+  const W=wb.addWorksheet('Stock',{properties:{tabColor:{argb:XC.in}},views:[{state:'frozen',ySplit:4,showGridLines:false}],pageSetup:{...setup,orientation:'landscape'}});
+  W.columns=[{width:30},{width:17},{width:14},{width:12},{width:15},{width:14},{width:9},{width:9},{width:14},{width:26}];
+  xTitle(W,10,'Stock actual de cada producto',sub+' · Ordenado de lo más urgente a lo más cómodo');
+  const smax=Math.max(1,...rows.map(x=>Math.max(0,x.s)));
+  let e=xTable(W,4,[{h:'Producto'},{h:'Código'},{h:'Marca'},{h:'Contenido'},{h:'Categoría'},{h:'Ubicación'},{h:'Stock',align:'right'},{h:'Mínimo',align:'right'},{h:'Estado',align:'center'},{h:'Nivel'}],
+    rows.map(x=>[{v:x.p.name,font:{bold:true}},x.p.code.startsWith('SC-')?'Sin código':x.p.code,x.p.brand||'',x.p.size||'',x.p.cat||'',x.p.loc||'',
+      {v:x.s,font:{bold:true,color:{argb:XST[x.k].c}}},x.p.min||0,{v:XST[x.k].t,fill:XST[x.k].f,font:{bold:true,color:{argb:XST[x.k].c}}},{v:xBar(Math.max(0,x.s),smax,20),font:{color:{argb:XST[x.k].c}}}]),
+    {filter:true,total:{label:'Total',sums:[[7,units]]}});
+  for(let i=5;i<5+rows.length;i++){W.getCell(i,2).numFmt='@';W.getCell(i,9).alignment={horizontal:'center',vertical:'middle'};}
+  if(!rows.length){W.getCell(5,1).value='Aún no hay productos registrados.';W.getCell(5,1).font={italic:true,color:{argb:XC.mut}};}
 
-  ${H2('Salidas en el tiempo',`Unidades que salieron por ${size>1?'semana':'día'} · ${esc(label.toLowerCase())}`)}
-  ${outs.length?svg:'<div class="empty">No hay salidas registradas en este período.</div>'}
+  /* ===== 3. Comprar ===== */
+  const B=wb.addWorksheet('Comprar',{properties:{tabColor:{argb:XC.warn}},views:[{state:'frozen',ySplit:4,showGridLines:false}],pageSetup:setup});
+  B.columns=[{width:30},{width:13},{width:10},{width:10},{width:15},{width:14},{width:12}];
+  xTitle(B,7,'Lista para comprar',sub+' · Productos agotados o en su mínimo');
+  const buy=rows.filter(x=>x.k!=='ok');
+  if(buy.length){
+    xTable(B,4,[{h:'Producto'},{h:'Contenido'},{h:'Quedan',align:'right'},{h:'Mínimo',align:'right'},{h:'Estado',align:'center'},{h:'Ubicación'},{h:'Comprado ✓',align:'center'}],
+      buy.map(x=>[{v:x.p.name,font:{bold:true}},x.p.size||'',{v:x.s,font:{bold:true,color:{argb:XST[x.k].c}}},x.p.min||0,{v:XST[x.k].t,fill:XST[x.k].f,font:{bold:true,color:{argb:XST[x.k].c}}},x.p.loc||'','☐']));
+    for(let i=5;i<5+buy.length;i++){B.getCell(i,5).alignment=B.getCell(i,7).alignment={horizontal:'center',vertical:'middle'};}
+  }else{B.mergeCells(4,1,4,7);B.getCell(4,1).value='✅ No falta nada: todo está sobre el mínimo.';B.getCell(4,1).font={bold:true,color:{argb:XC.in},size:12};}
 
-  ${H2('Productos que más salen','Los 8 con más unidades retiradas. Son los que conviene tener siempre disponibles.')}
-  ${top.length?top.map(([c,v])=>`<div class="hb"><span>${esc(pname(c))}</span><div class="bar"><i style="width:${Math.max(3,v/tmax*100)}%;background:#C2410C"></i></div><b>${fmt(v)}</b></div>`).join(''):'<div class="empty">Sin salidas en este período.</div>'}
+  /* ===== 4. Salidas ===== */
+  const O=wb.addWorksheet('Salidas',{properties:{tabColor:{argb:XC.out}},views:[{state:'frozen',ySplit:4,showGridLines:false}],pageSetup:setup});
+  O.columns=[{width:12},{width:8},{width:30},{width:17},{width:11},{width:18}];
+  xTitle(O,6,'Detalle de salidas',sub+' · Del más reciente al más antiguo');
+  if(outs.length){
+    e=xTable(O,4,[{h:'Fecha'},{h:'Hora'},{h:'Producto'},{h:'Código'},{h:'Cantidad',align:'right'},{h:'Registrado por'}],
+      outs.slice().reverse().map(m=>[xdate(m.ts),xtime(m.ts),pname(m.code),m.code.startsWith('SC-')?'Sin código':m.code,{v:xnum(Math.abs(m.d)),font:{bold:true,color:{argb:XC.out}}},m.by||'—']),
+      {filter:true,total:{label:'Total unidades',sums:[[5,sum(outs)]]}});
+    for(let i=5;i<5+outs.length;i++){O.getCell(i,1).numFmt='dd/mm/yyyy';O.getCell(i,4).numFmt='@';}
+  }else{O.mergeCells(4,1,4,6);O.getCell(4,1).value='No hay salidas en este período.';O.getCell(4,1).font={italic:true,color:{argb:XC.mut}};}
 
-  ${H2('Stock actual de cada producto','Ordenado de lo más urgente a lo más cómodo. La barra muestra cuánto hay comparado con el producto de mayor stock.')}
-  ${rows.length?`<table><thead><tr><th>Producto</th><th>Ubicación</th><th class="n">Stock</th><th class="n">Mínimo</th><th style="width:90px">Nivel</th><th>Estado</th></tr></thead><tbody>`+
-    rows.map(r=>`<tr><td><b>${esc(r.p.name)}</b><small>${[r.p.brand,r.p.size].filter(Boolean).map(esc).join(' · ')||esc(r.p.cat||'')}</small></td><td>${esc(r.p.loc||'')}</td><td class="n"><b>${fmt(r.s)}</b></td><td class="n">${fmt(r.p.min||0)}</td><td><div class="bar"><i style="width:${Math.max(r.s>0?4:0,Math.max(r.s,0)/smax*100)}%;background:${COL[r.k]}"></i></div></td><td><span class="pill ${r.k}">${PILL[r.k]}</span></td></tr>`).join('')+'</tbody></table>':'<div class="empty">Aún no hay productos registrados.</div>'}
+  /* ===== 5. Movimientos ===== */
+  const M=wb.addWorksheet('Movimientos',{properties:{tabColor:{argb:XC.set}},views:[{state:'frozen',ySplit:4,showGridLines:false}],pageSetup:{...setup,orientation:'landscape'}});
+  M.columns=[{width:12},{width:8},{width:30},{width:12},{width:11},{width:14},{width:18}];
+  xTitle(M,7,'Todos los movimientos',sub+' · Entradas, salidas y conteos con el stock que quedó');
+  const run={};for(const m of real){if(m.ts>=from)break;run[m.code]=(run[m.code]||0)+m.d;}
+  const mrows=ms.map(m=>{run[m.code]=(run[m.code]||0)+m.d;const k=XK[m.kind];
+    return [xdate(m.ts),xtime(m.ts),pname(m.code),{v:k.t,fill:k.f,font:{bold:true,color:{argb:k.c}}},{v:xnum(m.d),font:{bold:true,color:{argb:k.c}}},xnum(run[m.code]),m.by||'—'];}).reverse();
+  if(mrows.length){
+    xTable(M,4,[{h:'Fecha'},{h:'Hora'},{h:'Producto'},{h:'Tipo',align:'center'},{h:'Cantidad',align:'right'},{h:'Stock después',align:'right'},{h:'Registrado por'}],mrows,{filter:true});
+    for(let i=5;i<5+mrows.length;i++){M.getCell(i,1).numFmt='dd/mm/yyyy';M.getCell(i,5).numFmt='+General;-General;0';M.getCell(i,4).alignment={horizontal:'center',vertical:'middle'};}
+  }else{M.mergeCells(4,1,4,7);M.getCell(4,1).value='No hay movimientos en este período.';M.getCell(4,1).font={italic:true,color:{argb:XC.mut}};}
 
-  ${H2('Lista para comprar','Productos agotados o en su mínimo. Es la misma lista de la pestaña Compras.')}
-  ${buy.length?`<table><thead><tr><th>Producto</th><th class="n">Quedan</th><th class="n">Mínimo</th><th>Estado</th></tr></thead><tbody>`+buy.map(r=>`<tr><td><b>${esc(r.p.name)}</b>${r.p.size?`<small>${esc(r.p.size)}</small>`:''}</td><td class="n"><b>${fmt(r.s)}</b></td><td class="n">${fmt(r.p.min||0)}</td><td><span class="pill ${r.k}">${PILL[r.k]}</span></td></tr>`).join('')+'</tbody></table>':'<div class="empty">✅ No falta nada: todo está sobre el mínimo.</div>'}
+  /* ===== 6. Por día ===== */
+  const P=wb.addWorksheet('Por día',{properties:{tabColor:{argb:XC.g2}},views:[{state:'frozen',ySplit:4,showGridLines:false}],pageSetup:setup});
+  const size=days>92?7:1,nb=Math.ceil(days/size);
+  P.columns=[{width:size>1?20:13},{width:11},{width:11},{width:34}];
+  xTitle(P,4,size>1?'Movimiento por semana':'Movimiento por día',sub+' · La barra compara las salidas de cada '+(size>1?'semana':'día'));
+  const bi=Array(nb).fill(0),bo=Array(nb).fill(0);
+  for(const m of ms){const i=Math.min(nb-1,Math.floor((m.ts-from)/(D*size)));if(m.kind==='in')bi[i]+=Math.abs(m.d);if(m.kind==='out')bo[i]+=Math.abs(m.d);}
+  const omax=Math.max(0,...bo);
+  const prow=bi.map((v,i)=>{const d=from+i*size*D;return [size>1?'Semana del '+new Date(d).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'}):xdate(d),{v:xnum(v),font:{color:{argb:XC.in}}},{v:xnum(bo[i]),font:{bold:!!bo[i],color:{argb:XC.out}}},{v:xBar(bo[i],omax,30),font:{color:{argb:XC.out}}}];}).reverse();
+  e=xTable(P,4,[{h:size>1?'Semana':'Fecha'},{h:'Entradas',align:'right'},{h:'Salidas',align:'right'},{h:'Salidas (barra)'}],prow,{total:{label:'Total',sums:[[2,sum(ins)],[3,sum(outs)]]}});
+  if(size===1)for(let i=5;i<5+prow.length;i++)P.getCell(i,1).numFmt='ddd dd/mm/yyyy';
 
-  ${H2('Detalle de salidas',`Cada retiro del período, del más reciente al más antiguo${outs.length>200?' (se muestran los últimos 200 de '+outs.length+')':''}.`)}
-  ${outs.length?`<table><thead><tr><th>Fecha</th><th>Hora</th><th>Producto</th><th class="n">Cantidad</th><th>Registrado por</th></tr></thead><tbody>`+outs.slice().reverse().slice(0,200).map(m=>`<tr><td>${dfmt(m.ts)}</td><td>${tfmt(m.ts)}</td><td>${esc(pname(m.code))}</td><td class="n"><b>−${fmt(Math.abs(m.d))}</b></td><td>${esc(m.by||'—')}</td></tr>`).join('')+'</tbody></table>':'<div class="empty">No hay salidas en este período.</div>'}
-
-  ${Object.keys(users).some(u=>u!=='(sin nombre)')?H2('Movimientos por persona','Quién registró entradas y salidas. Para que aparezca el nombre, cada persona lo escribe en Historial → Nube.')+`<table><thead><tr><th>Persona</th><th class="n">Entradas</th><th class="n">Salidas</th></tr></thead><tbody>`+Object.entries(users).sort((a,b)=>b[1].o-a[1].o).map(([u,v])=>`<tr><td><b>${esc(u)}</b></td><td class="n">+${fmt(v.i)}</td><td class="n">−${fmt(v.o)}</td></tr>`).join('')+'</tbody></table>':''}
-
-  ${H2('Glosario','Palabras que se usan en la app.')}
-  <div class="gl"><div><b>Entrada</b>: llegó mercadería (compra, reposición).</div><div><b>Salida</b>: se retiró mercadería (venta, consumo, merma).</div><div><b>Conteo</b>: ajuste cuando cuentas lo que realmente hay y corriges el stock.</div><div><b>Mínimo</b>: cantidad a partir de la cual la app te avisa que hay que comprar.</div></div>
-  <div class="foot"><span>Mi Despensa · reporte generado automáticamente</span><span>${dfmt(Date.now())}</span></div>
-  </div>`;
-  $('#report').innerHTML=html;
+  return wb;
 }
-function printReport(){
-  const range=Number($('#repRange').value)||0;
-  buildReport(range);
-  const t=document.title;document.title='Reporte Mi Despensa '+stamp();
-  const done=()=>{document.title=t;window.removeEventListener('afterprint',done);};
-  window.addEventListener('afterprint',done);
-  setTimeout(()=>{window.print();setTimeout(done,3000);},120);
+async function downloadExcel(){
+  const btn=$('#repGo'),old=btn.textContent;btn.disabled=true;btn.textContent='Creando…';
+  try{
+    await loadExcelJS();
+    const wb=await buildExcel(Number($('#repRange').value)||0);
+    const buf=await wb.xlsx.writeBuffer();
+    download(`MiDespensa_${stamp()}.xlsx`,buf,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    toast('Excel descargado. Ábrelo desde Descargas.');
+    return true;
+  }catch(e){toast(e.message&&e.message!=='x'?e.message:'No se pudo crear el Excel');return false;}
+  finally{btn.disabled=false;btn.textContent=old;}
 }
-$('#repGo').onclick=printReport;
+function askWipe(){
+  busy=true;
+  $('#sheetBody').innerHTML=`<h2>Borrar todo</h2>
+    <p class="muted" style="margin:0">Se eliminan <b>todos los productos y movimientos</b>${C?' en este celular, en la planilla y en todos los celulares conectados':' de este celular'}. No se puede deshacer.</p>
+    <p class="muted" style="margin:0">Te recomendamos descargar primero el Excel para guardar una copia de todo.</p>
+    <div style="display:grid;gap:8px">
+      <button class="btn primary" type="button" id="wpXl">Descargar Excel y borrar todo</button>
+      <button class="btn danger" type="button" id="wpNow">Borrar sin descargar</button>
+      <button class="btn ghost" type="button" data-close>Cancelar</button>
+    </div>`;
+  $('#scrim').hidden=false;$('#sheet').hidden=false;
+  const wipe=()=>{replaceAll({},[]);toast('Inventario borrado');};
+  $('#wpXl').onclick=async()=>{const sel=$('#repRange');const prev=sel.value;sel.value='0';const ok=await downloadExcel();sel.value=prev;closeSheet();if(ok)wipe();else toast('No se borró nada porque el Excel no se pudo crear');};
+  $('#wpNow').onclick=e=>{const b=e.currentTarget;if(!b.dataset.arm){b.dataset.arm=1;b.textContent='Toca de nuevo para confirmar';return;}closeSheet();wipe();};
+}
+$('#repGo').onclick=downloadExcel;
+$('#wipe').onclick=askWipe;
 
 /* ---------- Ejemplos ---------- */
 function loadExamples(){
@@ -1424,7 +1515,6 @@ $('#copyBuy').onclick=async()=>{
 $('#moreHist').onclick=()=>{histLimit+=100;renderHist();};
 $('#expInv').onclick=expInv;$('#expMov').onclick=expMov;$('#expJson').onclick=expJson;
 $('#impJson').onchange=e=>{impJson(e.target.files[0]);e.target.value='';};
-$('#wipe').onclick=()=>confirmSheet('Borrar todo',C?'Se eliminan todos los productos y movimientos en este celular, en la planilla y en todos los celulares conectados. Descarga un respaldo antes si quieres conservarlos.':'Se eliminan todos los productos y movimientos de este celular. Descarga un respaldo antes si quieres conservarlos.','Borrar todo',()=>{replaceAll({},[]);toast('Inventario borrado');});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCam();else if(C)schedSync(200);});
 window.addEventListener('online',()=>{if(C)schedSync(200);});
 setInterval(()=>{if(C&&!document.hidden&&navigator.onLine!==false)sync();},20000);
